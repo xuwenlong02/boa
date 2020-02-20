@@ -538,7 +538,7 @@ impl Executor for Interpreter {
                     ValueData::Boolean(_) => "boolean",
                     ValueData::Rational(_) | ValueData::Integer(_) => "number",
                     ValueData::String(_) => "string",
-                    ValueData::Function(_) => "function",
+                    ValueData::FunctionObj(_) | ValueData::Function(_) => "function",
                 }))
             }
             Node::StatementList(ref list) => {
@@ -745,6 +745,7 @@ impl Interpreter {
     pub fn to_object(&mut self, value: &Value) -> ResultValue {
         match *value.deref().borrow() {
             ValueData::Undefined
+            | ValueData::FunctionObj(_)
             | ValueData::Function(_)
             | ValueData::Integer(_)
             | ValueData::Null => Err(Gc::new(ValueData::Undefined)),

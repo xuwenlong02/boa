@@ -7,6 +7,7 @@ mod tests;
 
 use crate::builtins::{
     function::{Function, NativeFunction, NativeFunctionData},
+    function_object::Function as FunctionObj,
     object::{
         internal_methods_trait::ObjectInternalMethods, InternalState, InternalStateCell, Object,
         ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE,
@@ -55,6 +56,7 @@ pub enum ValueData {
     Object(GcCell<Object>),
     /// `Function` - A runnable block of code, such as `Math.sqrt`, which can take some variables and return a useful value or act upon an object
     Function(Box<GcCell<Function>>),
+    FunctionObj(Box<FunctionObj>),
     /// `Symbol` - A Symbol Type - Internally Symbols are similar to objects, except there are no properties, only internal slots
     Symbol(GcCell<Object>),
 }
@@ -207,7 +209,11 @@ impl ValueData {
     /// Converts the value into a 64-bit floating point number
     pub fn to_num(&self) -> f64 {
         match *self {
-            Self::Object(_) | Self::Symbol(_) | Self::Undefined | Self::Function(_) => NAN,
+            Self::Object(_)
+            | Self::Symbol(_)
+            | Self::Undefined
+            | Self::Function(_)
+            | FunctionObj(_) => NAN,
             Self::String(ref str) => match FromStr::from_str(str) {
                 Ok(num) => num,
                 Err(_) => NAN,
@@ -227,6 +233,7 @@ impl ValueData {
             | Self::Symbol(_)
             | Self::Null
             | Self::Boolean(false)
+            | Self::FunctionObj(_)
             | Self::Function(_) => 0,
             Self::String(ref str) => match FromStr::from_str(str) {
                 Ok(num) => num,
@@ -609,6 +616,7 @@ impl ValueData {
             ValueData::Null
             | ValueData::Symbol(_)
             | ValueData::Undefined
+            | ValueData::FunctionObj(_)
             | ValueData::Function(_) => JSONValue::Null,
             ValueData::Boolean(b) => JSONValue::Bool(b),
             ValueData::Object(ref obj) => {
@@ -639,7 +647,7 @@ impl ValueData {
             Self::Symbol(_) => "symbol",
             Self::Null => "null",
             Self::Undefined => "undefined",
-            Self::Function(_) => "function",
+            Self::Function(_) | FunctionObj(_) => "function",
             Self::Object(ref o) => {
                 if o.deref().borrow().get_internal_slot("call").is_null() {
                     "object"
@@ -873,6 +881,7 @@ impl Display for ValueData {
             ),
             Self::Object(_) => write!(f, "{}", log_string_from(self, true)),
             Self::Integer(v) => write!(f, "{}", v),
+            FunctionObj(_) => write!(f, "{}", v),
             Self::Function(ref v) => match *v.borrow() {
                 Function::NativeFunc(_) => write!(f, "function() {{ [native code] }}"),
                 Function::RegularFunc(ref rf) => {
@@ -1129,6 +1138,21 @@ impl FromValue for Object {
                 Function::NativeFunc(ref data) => data.object.clone(),
                 Function::RegularFunc(ref data) => data.object.clone(),
             }),
+            _ => Err("Value is not a valid object"),
+        }
+    }
+}
+
+impl ToValue for FunctionObj {
+    fn to_value(&self) -> Value {
+        Gc::new(ValueData::FunctionObj(Box::new(self.clone())))
+    }
+}
+
+impl FromValue for FunctionObj {
+    fn from_value(v: Value) -> Result<Self, &'static str> {
+        match *v {
+            ValueData::FunctionObj(ref func) => Ok(*func.clone()),
             _ => Err("Value is not a valid object"),
         }
     }

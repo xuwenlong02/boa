@@ -19,6 +19,7 @@ pub mod boolean;
 pub mod console;
 pub mod error;
 pub mod function;
+pub mod function_object;
 pub mod json;
 pub mod math;
 pub mod number;
