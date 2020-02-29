@@ -16,7 +16,7 @@ extern "C" {
 
 #[wasm_bindgen]
 pub fn evaluate(src: &str) -> String {
-    let mut lexer = Lexer::new(&src);
+    let mut lexer = Lexer::new(&src, None);
     match lexer.lex() {
         Ok(_v) => (),
         Err(v) => log(&v.to_string()),

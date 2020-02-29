@@ -9,6 +9,7 @@ use crate::syntax::ast::{
     punc::Punctuator,
     token::{Token, TokenData},
 };
+use crossbeam::channel::Receiver;
 use std::{collections::btree_map::BTreeMap, fmt};
 
 /// `ParseError` is an enum which represents errors encounted during parsing an expression
@@ -22,6 +23,8 @@ pub enum ParseError {
     UnexpectedKeyword(Keyword),
     /// When there is an abrupt end to the parsing
     AbruptEnd,
+    /// When the lexer has stopped sending values or closed the channel
+    LexerChannelClosed,
 }
 
 impl fmt::Display for ParseError {
@@ -52,6 +55,8 @@ pub type ParseResult = Result<Expr, ParseError>;
 
 #[derive(Debug)]
 pub struct Parser {
+    /// The channel to recieve tokens on
+    token_channel: Option<Receiver<Token>>,
     /// The tokens being input
     tokens: Vec<Token>,
     /// The current position within the tokens
@@ -59,14 +64,30 @@ pub struct Parser {
 }
 
 impl Parser {
-    /// Create a new parser, using `tokens` as input
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+    /// Create a new parser, using `tokens` as input or a channel to read tokens from
+    pub fn new(tokens: Vec<Token>, token_channel: Option<Receiver<Token>>) -> Self {
+        Self {
+            token_channel,
+            tokens,
+            pos: 0,
+        }
     }
 
     /// Parse all expressions in the token array
     pub fn parse_all(&mut self) -> ParseResult {
         let mut exprs = Vec::new();
+        match self.token_channel {
+            Some(token_stream) => {
+                // if a channel is being used, loop through it until we have no more values left
+                loop {
+                    match token_stream.next() {
+                        Some(_) => {
+                            let result = self.parse()?;
+                        }
+                    }
+                }
+            }
+        }
         while self.pos < self.tokens.len() {
             let result = self.parse()?;
             exprs.push(result);
@@ -80,6 +101,42 @@ impl Parser {
             Ok(self.tokens.get(pos).expect("failed getting token").clone())
         } else {
             Err(ParseError::AbruptEnd)
+        }
+    }
+
+    /// Get the next token and update the position
+    fn get_next_token(&self) -> Result<Token, ParseError> {
+        // Increment the position
+        self.pos = self.pos.wrapping_add(1);
+        match self.token_channel {
+            Some(token_stream) => {
+                // check to see if the channel is still open
+                // This will block until there is data (waiting on the lexer to catch up) then Ok()
+                // Or None means there's no more data and the channel has closed (lexer has finshed)
+                match token_stream.recv() {
+                    Ok(tk) => {
+                        // We have a value
+                        self.tokens.push(tk); // Store the value in our buffer, we may need it later
+                        return Ok(tk);
+                    }
+                    Err(e) => {
+                        // A message could not be received because the channel is empty and disconnected.
+                        return Err(ParseError::LexerChannelClosed);
+                    }
+                }
+            }
+            None => {
+                // fallback to traditional method of getting the next token out of the provided buffer
+                if self.pos < self.tokens.len() {
+                    Ok(self
+                        .tokens
+                        .get(self.pos)
+                        .expect("failed getting token")
+                        .clone())
+                } else {
+                    Err(ParseError::AbruptEnd)
+                }
+            }
         }
     }
 

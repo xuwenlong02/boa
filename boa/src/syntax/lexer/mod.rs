@@ -17,6 +17,8 @@ use std::{
     str::{Chars, FromStr},
 };
 
+use crossbeam::channel::Sender;
+
 macro_rules! vop {
     ($this:ident, $assign_op:expr, $op:expr) => ({
         let preview = $this.preview_next().ok_or_else(|| LexerError::new("Could not preview next value"))?;
@@ -105,6 +107,8 @@ impl error::Error for LexerError {
 pub struct Lexer<'a> {
     // The list fo tokens generated so far
     pub tokens: Vec<Token>,
+    // Use new tokens channel for concurrency, for now this feature is optional
+    pub tokens_channel: Option<Sender<Token>>,
     // The current line number in the script
     line_number: u64,
     // the current column number in the script
@@ -127,18 +131,27 @@ impl<'a> Lexer<'a> {
     /// let buffer = std::fs::read_to_string("yourSourceCode.js").unwrap();
     /// let lexer = boa::syntax::lexer::Lexer::new(&buffer);
     /// ```
-    pub fn new(buffer: &'a str) -> Lexer<'a> {
+    pub fn new(buffer: &'a str, tokenStream: Option<Sender<Token>>) -> Lexer<'a> {
         Lexer {
             tokens: Vec::new(),
+            tokens_channel: tokenStream,
             line_number: 1,
             column_number: 0,
             buffer: buffer.chars().peekable(),
         }
     }
-    /// Push tokens onto the token queue
+
+    /// Push tokens into the tokenStream channel if provided
+    /// otherwise just fill up the internal buffer (it will not do both)
     fn push_token(&mut self, tk: TokenData) {
-        self.tokens
-            .push(Token::new(tk, self.line_number, self.column_number))
+        // Create token
+        let token = Token::new(tk, self.line_number, self.column_number);
+        match self.tokens_channel {
+            Some(tokenStream) => tokenStream
+                .send(token)
+                .expect("Failed to send token into the channel buffer"),
+            None => self.tokens.push(token),
+        };
     }
 
     /// Push a punctuation token

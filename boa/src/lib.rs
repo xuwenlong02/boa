@@ -12,20 +12,45 @@ mod wasm;
 
 #[cfg(feature = "wasm-bindgen")]
 pub use crate::wasm::*;
+
 use crate::{
     builtins::value::ResultValue,
     exec::{Executor, Interpreter},
     realm::Realm,
-    syntax::{ast::expr::Expr, lexer::Lexer, parser::Parser},
+    syntax::{
+        ast::{expr::Expr, token::Token},
+        lexer::Lexer,
+        parser::Parser,
+    },
 };
 
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use std::thread;
+
 fn parser_expr(src: &str) -> Result<Expr, String> {
-    let mut lexer = Lexer::new(src);
+    let mut lexer = Lexer::new(src, None);
     lexer.lex().map_err(|e| format!("SyntaxError: {}", e))?;
     let tokens = lexer.tokens;
     Parser::new(tokens)
         .parse_all()
         .map_err(|e| format!("ParsingError: {}", e))
+}
+
+fn parser_expr_concurrent(src: &str) -> Result<Expr, String> {
+    // Create channel to send tokens from the lexer to the parser
+    let (tokenStreamSender, tokenStreamReceiver): (Sender<Token>, Receiver<Token>) = unbounded();
+
+    thread::spawn(move || {
+        let mut lexer = Lexer::new(src, Some(tokenStreamSender));
+        lexer
+            .lex()
+            .map_err(|e| format!("SyntaxError: {}", e))
+            .unwrap();
+    });
+
+    // Parser::new(tokens)
+    //     .parse_all()
+    //     .map_err(|e| format!("ParsingError: {}", e))
 }
 
 /// Execute the code using an existing Interpreter
