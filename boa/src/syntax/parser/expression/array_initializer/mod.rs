@@ -7,10 +7,13 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array
 //! [spec]: https://tc39.es/ecma262/#sec-array-initializer
 
+#[cfg(test)]
+mod tests;
+
 use super::AssignmentExpression;
 use crate::syntax::{
     ast::{constant::Const, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{Cursor, ParseError, ParseResult, TokenParser},
+    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
 };
 
 /// Parses an array literal.
@@ -22,10 +25,29 @@ use crate::syntax::{
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array
 /// [spec]: https://tc39.es/ecma262/#prod-ArrayLiteral
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ArrayLiteral;
+pub(super) struct ArrayLiteral {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl ArrayLiteral {
+    /// Creates a new `ArrayLiteral` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for ArrayLiteral {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -50,10 +72,14 @@ impl TokenParser for ArrayLiteral {
                 .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::Spread))
                 .is_some()
             {
-                let node = AssignmentExpression::parse(cursor)?;
+                let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                    .parse(cursor)?;
                 elements.push(Node::spread(node));
             } else {
-                elements.push(AssignmentExpression::parse(cursor)?);
+                elements.push(
+                    AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor)?,
+                );
             }
             cursor.next_if(TokenKind::Punctuator(Punctuator::Comma));
         }

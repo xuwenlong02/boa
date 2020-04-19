@@ -5,12 +5,12 @@
 //!
 //! [spec]: https://tc39.es/ecma262/#prod-MemberExpression
 
-use super::arguments::read_arguments;
+use super::arguments::Arguments;
 use crate::syntax::{
     ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
     parser::{
         expression::{primary_expression::PrimaryExpression, Expression},
-        Cursor, ParseError, ParseResult, TokenParser,
+        AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
     },
 };
 
@@ -21,10 +21,29 @@ use crate::syntax::{
 ///
 /// [spec]: https://tc39.es/ecma262/#prod-MemberExpression
 #[derive(Debug, Clone, Copy)]
-pub(super) struct MemberExpression;
+pub(super) struct MemberExpression {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl MemberExpression {
+    /// Creates a new `MemberExpression` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for MemberExpression {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         let mut lhs = if cursor
             .peek_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?
@@ -34,14 +53,14 @@ impl TokenParser for MemberExpression {
             let _ = cursor
                 .next_skip_lineterminator()
                 .expect("keyword disappeared");
-            let lhs = Self::parse(cursor)?;
-            cursor.expect_punc(Punctuator::OpenParen, "member expression")?;
-            let args = read_arguments(cursor)?;
+            let lhs = self.parse(cursor)?;
+            cursor.expect(Punctuator::OpenParen, "member expression")?;
+            let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
             let call_node = Node::call(lhs, args);
 
             Node::new(call_node)
         } else {
-            PrimaryExpression::parse(cursor)?
+            PrimaryExpression::new(self.allow_yield, self.allow_await).parse(cursor)?
         };
         while let Some(tok) = cursor.peek_skip_lineterminator() {
             match &tok.kind {
@@ -69,8 +88,9 @@ impl TokenParser for MemberExpression {
                     let _ = cursor
                         .next_skip_lineterminator()
                         .ok_or(ParseError::AbruptEnd)?; // We move the cursor forward.
-                    let idx = Expression::parse(cursor)?;
-                    cursor.expect_punc(Punctuator::CloseBracket, "member expression")?;
+                    let idx =
+                        Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+                    cursor.expect(Punctuator::CloseBracket, "member expression")?;
                     lhs = Node::get_field(lhs, idx);
                 }
                 _ => break,

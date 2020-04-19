@@ -1,7 +1,12 @@
+#[cfg(test)]
+mod tests;
+
 use super::{array_initializer::ArrayLiteral, object_initializer::ObjectLiteral, Expression};
 use crate::syntax::{
     ast::{constant::Const, keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{Cursor, FunctionExpression, ParseError, ParseResult, TokenParser},
+    parser::{
+        AllowAwait, AllowYield, Cursor, FunctionExpression, ParseError, ParseResult, TokenParser,
+    },
 };
 
 /// Parses a primary expression.
@@ -13,10 +18,29 @@ use crate::syntax::{
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_Operators#Primary_expressions
 /// [spec]: https://tc39.es/ecma262/#prod-PrimaryExpression
 #[derive(Debug, Clone, Copy)]
-pub(super) struct PrimaryExpression;
+pub(super) struct PrimaryExpression {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl PrimaryExpression {
+    /// Creates a new `PrimaryExpression` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for PrimaryExpression {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         let tok = cursor
             .next_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
@@ -24,14 +48,21 @@ impl TokenParser for PrimaryExpression {
         match &tok.kind {
             TokenKind::Keyword(Keyword::This) => Ok(Node::This),
             // TokenKind::Keyword(Keyword::Arguments) => Ok(Node::new(NodeBase::Arguments, tok.pos)),
-            TokenKind::Keyword(Keyword::Function) => FunctionExpression::parse(cursor),
+            TokenKind::Keyword(Keyword::Function) => {
+                FunctionExpression::new(self.allow_yield, self.allow_await).parse(cursor)
+            }
             TokenKind::Punctuator(Punctuator::OpenParen) => {
-                let expr = Expression::parse(cursor)?;
-                cursor.expect_punc(Punctuator::CloseParen, "primary expression")?;
+                let expr =
+                    Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+                cursor.expect(Punctuator::CloseParen, "primary expression")?;
                 Ok(expr)
             }
-            TokenKind::Punctuator(Punctuator::OpenBracket) => ArrayLiteral::parse(cursor),
-            TokenKind::Punctuator(Punctuator::OpenBlock) => ObjectLiteral::parse(cursor),
+            TokenKind::Punctuator(Punctuator::OpenBracket) => {
+                ArrayLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+            }
+            TokenKind::Punctuator(Punctuator::OpenBlock) => {
+                ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+            }
             TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(*boolean)),
             // TODO: ADD TokenKind::UndefinedLiteral
             TokenKind::Identifier(ref i) if i == "undefined" => Ok(Node::Const(Const::Undefined)),

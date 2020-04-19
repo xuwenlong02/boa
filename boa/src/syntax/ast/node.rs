@@ -667,8 +667,6 @@ pub struct FormalParameter {
     pub is_rest_param: bool,
 }
 
-pub type FormalParameters = Vec<FormalParameter>;
-
 impl FormalParameter {
     pub fn new<N>(name: N, init: Option<Box<Node>>, is_rest_param: bool) -> Self
     where

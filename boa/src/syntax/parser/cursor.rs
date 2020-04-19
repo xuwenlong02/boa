@@ -118,12 +118,13 @@ impl<'a> Cursor<'a> {
     /// Returns an error if the next token is not of kind `kind`.
     ///
     /// Note: it will consume the next token.
-    pub(super) fn expect(
-        &mut self,
-        kind: TokenKind,
-        routine: &'static str,
-    ) -> Result<(), ParseError> {
+    pub(super) fn expect<K>(&mut self, kind: K, routine: &'static str) -> Result<(), ParseError>
+    where
+        K: Into<TokenKind>,
+    {
         let next_token = self.next().ok_or(ParseError::AbruptEnd)?;
+        let kind = kind.into();
+
         if next_token.kind == kind {
             Ok(())
         } else {
@@ -133,17 +134,6 @@ impl<'a> Cursor<'a> {
                 routine,
             ))
         }
-    }
-
-    /// Returns an error if the next token is not the punctuator `p`.
-    ///
-    /// Note: it will consume the next token.
-    pub(super) fn expect_punc(
-        &mut self,
-        p: Punctuator,
-        routine: &'static str,
-    ) -> Result<(), ParseError> {
-        self.expect(TokenKind::Punctuator(p), routine)
     }
 
     /// It will check if the next token is a semicolon.

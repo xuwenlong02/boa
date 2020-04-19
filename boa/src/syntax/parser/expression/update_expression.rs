@@ -8,7 +8,7 @@
 use super::lhs_expression::LeftHandSideExpression;
 use crate::syntax::{
     ast::{node::Node, op::UnaryOp, punc::Punctuator, token::TokenKind},
-    parser::{Cursor, ParseError, ParseResult, TokenParser},
+    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
 };
 
 /// Parses an update expression.
@@ -18,10 +18,29 @@ use crate::syntax::{
 ///
 /// [spec]: https://tc39.es/ecma262/#prod-UpdateExpression
 #[derive(Debug, Clone, Copy)]
-pub(super) struct UpdateExpression;
+pub(super) struct UpdateExpression {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl UpdateExpression {
+    /// Creates a new `UpdateExpression` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for UpdateExpression {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         let tok = cursor
             .peek_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
@@ -32,7 +51,8 @@ impl TokenParser for UpdateExpression {
                     .expect("token disappeared");
                 return Ok(Node::unary_op(
                     UnaryOp::IncrementPre,
-                    LeftHandSideExpression::parse(cursor)?,
+                    LeftHandSideExpression::new(self.allow_yield, self.allow_await)
+                        .parse(cursor)?,
                 ));
             }
             TokenKind::Punctuator(Punctuator::Dec) => {
@@ -41,13 +61,14 @@ impl TokenParser for UpdateExpression {
                     .expect("token disappeared");
                 return Ok(Node::unary_op(
                     UnaryOp::DecrementPre,
-                    LeftHandSideExpression::parse(cursor)?,
+                    LeftHandSideExpression::new(self.allow_yield, self.allow_await)
+                        .parse(cursor)?,
                 ));
             }
             _ => {}
         }
 
-        let lhs = LeftHandSideExpression::parse(cursor)?;
+        let lhs = LeftHandSideExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
         if let Some(tok) = cursor.peek(0) {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Inc) => {

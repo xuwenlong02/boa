@@ -11,10 +11,10 @@ mod arguments;
 mod call_expression;
 mod member_expression;
 
-use self::{call_expression::read_call_expression, member_expression::MemberExpression};
+use self::{call_expression::CallExpression, member_expression::MemberExpression};
 use crate::syntax::{
-    ast::{punc::Punctuator, token::TokenKind},
-    parser::{Cursor, ParseResult, TokenParser},
+    ast::{node::Node, punc::Punctuator, token::TokenKind},
+    parser::{AllowAwait, AllowYield, Cursor, ParseResult, TokenParser},
 };
 
 /// Parses a left hand side expression.
@@ -26,15 +26,34 @@ use crate::syntax::{
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_Operators#Left-hand-side_expressions
 /// [spec]: https://tc39.es/ecma262/#prod-LeftHandSideExpression
 #[derive(Debug, Clone, Copy)]
-pub(super) struct LeftHandSideExpression;
+pub(super) struct LeftHandSideExpression {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl LeftHandSideExpression {
+    /// Creates a new `LeftHandSideExpression` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for LeftHandSideExpression {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         // TODO: Implement NewExpression: new MemberExpression
-        let lhs = MemberExpression::parse(cursor)?;
+        let lhs = MemberExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
         match cursor.peek_skip_lineterminator() {
             Some(ref tok) if tok.kind == TokenKind::Punctuator(Punctuator::OpenParen) => {
-                read_call_expression(cursor, lhs)
+                CallExpression::new(self.allow_yield, self.allow_await, lhs).parse(cursor)
             }
             _ => Ok(lhs), // TODO: is this correct?
         }

@@ -7,15 +7,19 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Object_initializer
 //! [spec]: https://tc39.es/ecma262/#sec-object-initializer
 
+#[cfg(test)]
+mod tests;
+
 use super::assignment_operator::AssignmentExpression;
 use crate::syntax::{
     ast::{
-        node::{MethodDefinitionKind, Node, PropertyDefinition},
+        node::{self, MethodDefinitionKind, Node},
         punc::Punctuator,
         token::TokenKind,
     },
     parser::{
-        read_formal_parameters, read_statements, Cursor, ParseError, ParseResult, TokenParser,
+        AllowAwait, AllowIn, AllowYield, Cursor, FormalParameters, FunctionBody, ParseError,
+        ParseResult, TokenParser,
     },
 };
 
@@ -28,10 +32,29 @@ use crate::syntax::{
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Object_initializer
 /// [spec]: https://tc39.es/ecma262/#prod-ObjectLiteral
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ObjectLiteral;
+pub(super) struct ObjectLiteral {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl ObjectLiteral {
+    /// Creates a new `ObjectLiteral` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl TokenParser for ObjectLiteral {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -42,7 +65,8 @@ impl TokenParser for ObjectLiteral {
                 break;
             }
 
-            elements.push(Self::read_property_definition(cursor)?);
+            elements
+                .push(PropertyDefinition::new(self.allow_yield, self.allow_await).parse(cursor)?);
 
             if cursor
                 .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::CloseBlock))
@@ -73,14 +97,38 @@ impl TokenParser for ObjectLiteral {
     }
 }
 
-impl ObjectLiteral {
-    /// Parses a property definition.
-    ///
-    /// More information:
-    ///  - [ECMAScript specification][spec]
-    ///
-    /// [spec]: https://tc39.es/ecma262/#prod-PropertyDefinition
-    fn read_property_definition(cursor: &mut Cursor<'_>) -> Result<PropertyDefinition, ParseError> {
+impl ObjectLiteral {}
+
+/// Parses a property definition.
+///
+/// More information:
+///  - [ECMAScript specification][spec]
+///
+/// [spec]: https://tc39.es/ecma262/#prod-PropertyDefinition
+#[derive(Debug, Clone, Copy)]
+struct PropertyDefinition {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl PropertyDefinition {
+    /// Creates a new `PropertyDefinition` parser.
+    fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
+
+impl TokenParser for PropertyDefinition {
+    type Output = node::PropertyDefinition;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
         fn to_string(kind: &TokenKind) -> String {
             match kind {
                 TokenKind::Identifier(name) => name.clone(),
@@ -94,8 +142,9 @@ impl ObjectLiteral {
             .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::Spread))
             .is_some()
         {
-            let node = AssignmentExpression::parse(cursor)?;
-            return Ok(PropertyDefinition::SpreadObject(node));
+            let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                .parse(cursor)?;
+            return Ok(node::PropertyDefinition::SpreadObject(node));
         }
 
         let prop_name = cursor
@@ -107,8 +156,9 @@ impl ObjectLiteral {
             .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::Colon))
             .is_some()
         {
-            let val = AssignmentExpression::parse(cursor)?;
-            return Ok(PropertyDefinition::Property(prop_name, val));
+            let val = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                .parse(cursor)?;
+            return Ok(node::PropertyDefinition::Property(prop_name, val));
         }
 
         // TODO: Split into separate function: read_property_method_definition
@@ -116,15 +166,17 @@ impl ObjectLiteral {
             .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::OpenParen))
             .is_some()
         {
-            let params = read_formal_parameters(cursor)?;
+            let params = FormalParameters::new(self.allow_yield, self.allow_await).parse(cursor)?;
 
-            cursor.expect_punc(Punctuator::OpenBlock, "method definition")?;
+            cursor.expect(Punctuator::OpenBlock, "method definition")?;
 
-            let body = read_statements(cursor, true).map(Node::StatementList)?;
+            let body = FunctionBody::new(self.allow_yield, self.allow_await)
+                .parse(cursor)
+                .map(Node::StatementList)?;
 
-            cursor.expect_punc(Punctuator::CloseBlock, "method definition")?;
+            cursor.expect(Punctuator::CloseBlock, "method definition")?;
 
-            return Ok(PropertyDefinition::MethodDefinition(
+            return Ok(node::PropertyDefinition::MethodDefinition(
                 MethodDefinitionKind::Ordinary,
                 prop_name,
                 Node::FunctionDecl(None, params, Box::new(body)),
@@ -167,5 +219,47 @@ impl ObjectLiteral {
             "expected property definition",
             Some(pos),
         ))
+    }
+}
+
+/// Initializer parsing.
+///
+/// More information:
+///  - [ECMAScript specification][spec]
+///
+/// [spec]: https://tc39.es/ecma262/#prod-Initializer
+#[derive(Debug, Clone, Copy)]
+pub(in crate::syntax::parser) struct Initializer {
+    allow_in: AllowIn,
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl Initializer {
+    /// Creates a new `Initializer` parser.
+    pub(in crate::syntax::parser) fn new<I, Y, A>(
+        allow_in: I,
+        allow_yield: Y,
+        allow_await: A,
+    ) -> Self
+    where
+        I: Into<AllowIn>,
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_in: allow_in.into(),
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
+
+impl TokenParser for Initializer {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+        cursor.expect(Punctuator::Assign, "initializer")?;
+        AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await).parse(cursor)
     }
 }

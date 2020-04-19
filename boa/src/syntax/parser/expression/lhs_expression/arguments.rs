@@ -10,7 +10,8 @@
 use crate::syntax::{
     ast::{node::Node, punc::Punctuator, token::TokenKind},
     parser::{
-        expression::assignment_operator::AssignmentExpression, Cursor, ParseError, TokenParser,
+        expression::assignment_operator::AssignmentExpression, AllowAwait, AllowYield, Cursor,
+        ParseError, TokenParser,
     },
 };
 
@@ -22,52 +23,80 @@ use crate::syntax::{
 ///
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Glossary/Argument
 /// [spec]: https://tc39.es/ecma262/#prod-Arguments
-pub(in crate::syntax::parser::expression) fn read_arguments(
-    cursor: &mut Cursor<'_>,
-) -> Result<Vec<Node>, ParseError> {
-    let mut args = Vec::new();
-    loop {
-        let next_token = cursor
-            .next_skip_lineterminator()
-            .ok_or(ParseError::AbruptEnd)?;
-        match next_token.kind {
-            TokenKind::Punctuator(Punctuator::CloseParen) => break,
-            TokenKind::Punctuator(Punctuator::Comma) => {
-                if args.is_empty() {
-                    return Err(ParseError::Unexpected(next_token.clone(), None));
-                }
+#[derive(Debug, Clone, Copy)]
+pub(in crate::syntax::parser::expression) struct Arguments {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
 
-                if cursor
-                    .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::CloseParen))
-                    .is_some()
-                {
-                    break;
-                }
-            }
-            _ => {
-                if !args.is_empty() {
-                    return Err(ParseError::Expected(
-                        vec![
-                            TokenKind::Punctuator(Punctuator::Comma),
-                            TokenKind::Punctuator(Punctuator::CloseParen),
-                        ],
-                        next_token.clone(),
-                        "argument list",
-                    ));
-                } else {
-                    cursor.back();
-                }
-            }
-        }
-
-        if cursor
-            .next_if(TokenKind::Punctuator(Punctuator::Spread))
-            .is_some()
-        {
-            args.push(Node::spread(AssignmentExpression::parse(cursor)?));
-        } else {
-            args.push(AssignmentExpression::parse(cursor)?);
+impl Arguments {
+    /// Creates a new `Arguments` parser.
+    pub(in crate::syntax::parser::expression) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
         }
     }
-    Ok(args)
+}
+
+impl TokenParser for Arguments {
+    type Output = Vec<Node>;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Vec<Node>, ParseError> {
+        let mut args = Vec::new();
+        loop {
+            let next_token = cursor
+                .next_skip_lineterminator()
+                .ok_or(ParseError::AbruptEnd)?;
+            match next_token.kind {
+                TokenKind::Punctuator(Punctuator::CloseParen) => break,
+                TokenKind::Punctuator(Punctuator::Comma) => {
+                    if args.is_empty() {
+                        return Err(ParseError::Unexpected(next_token.clone(), None));
+                    }
+
+                    if cursor
+                        .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::CloseParen))
+                        .is_some()
+                    {
+                        break;
+                    }
+                }
+                _ => {
+                    if !args.is_empty() {
+                        return Err(ParseError::Expected(
+                            vec![
+                                TokenKind::Punctuator(Punctuator::Comma),
+                                TokenKind::Punctuator(Punctuator::CloseParen),
+                            ],
+                            next_token.clone(),
+                            "argument list",
+                        ));
+                    } else {
+                        cursor.back();
+                    }
+                }
+            }
+
+            if cursor
+                .next_if(TokenKind::Punctuator(Punctuator::Spread))
+                .is_some()
+            {
+                args.push(Node::spread(
+                    AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor)?,
+                ));
+            } else {
+                args.push(
+                    AssignmentExpression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor)?,
+                );
+            }
+        }
+        Ok(args)
+    }
 }

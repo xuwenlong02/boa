@@ -16,7 +16,7 @@ use crate::syntax::{
         punc::Punctuator,
         token::TokenKind,
     },
-    parser::{Cursor, ParseResult, TokenParser},
+    parser::{AllowAwait, AllowYield, Cursor, ParseResult, TokenParser},
 };
 
 /// Parses an exponentiation expression.
@@ -28,7 +28,24 @@ use crate::syntax::{
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Arithmetic_Operators#Exponentiation
 /// [spec]: https://tc39.es/ecma262/#prod-ExponentiationExpression
 #[derive(Debug, Clone, Copy)]
-pub(super) struct ExponentiationExpression;
+pub(super) struct ExponentiationExpression {
+    allow_yield: AllowYield,
+    allow_await: AllowAwait,
+}
+
+impl ExponentiationExpression {
+    /// Creates a new `ExponentiationExpression` parser.
+    pub(super) fn new<Y, A>(allow_yield: Y, allow_await: A) -> Self
+    where
+        Y: Into<AllowYield>,
+        A: Into<AllowAwait>,
+    {
+        Self {
+            allow_yield: allow_yield.into(),
+            allow_await: allow_await.into(),
+        }
+    }
+}
 
 impl ExponentiationExpression {
     /// Checks by looking at the next token to see whether it's a unary operator or not.
@@ -51,18 +68,20 @@ impl ExponentiationExpression {
 }
 
 impl TokenParser for ExponentiationExpression {
-    fn parse(cursor: &mut Cursor<'_>) -> ParseResult {
+    type Output = Node;
+
+    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
         if Self::is_unary_expression(cursor) {
-            return UnaryExpression::parse(cursor);
+            return UnaryExpression::new(self.allow_yield, self.allow_await).parse(cursor);
         }
 
-        let lhs = UpdateExpression::parse(cursor)?;
+        let lhs = UpdateExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
         if let Some(tok) = cursor.next() {
             if let TokenKind::Punctuator(Punctuator::Exp) = tok.kind {
                 return Ok(Node::bin_op(
                     BinOp::Num(NumOp::Exp),
                     lhs,
-                    Self::parse(cursor)?,
+                    self.parse(cursor)?,
                 ));
             } else {
                 cursor.back();

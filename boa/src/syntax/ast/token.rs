@@ -68,6 +68,24 @@ pub enum TokenKind {
     LineTerminator,
 }
 
+impl From<bool> for TokenKind {
+    fn from(oth: bool) -> Self {
+        Self::BooleanLiteral(oth)
+    }
+}
+
+impl From<Keyword> for TokenKind {
+    fn from(kw: Keyword) -> Self {
+        Self::Keyword(kw)
+    }
+}
+
+impl From<Punctuator> for TokenKind {
+    fn from(punc: Punctuator) -> Self {
+        Self::Punctuator(punc)
+    }
+}
+
 impl TokenKind {
     /// Creates a `BooleanLiteral` token kind.
     pub fn boolean_literal(lit: bool) -> Self {
