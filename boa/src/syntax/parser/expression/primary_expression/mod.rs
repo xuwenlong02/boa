@@ -48,9 +48,7 @@ impl TokenParser for PrimaryExpression {
         match &tok.kind {
             TokenKind::Keyword(Keyword::This) => Ok(Node::This),
             // TokenKind::Keyword(Keyword::Arguments) => Ok(Node::new(NodeBase::Arguments, tok.pos)),
-            TokenKind::Keyword(Keyword::Function) => {
-                FunctionExpression::new(self.allow_yield, self.allow_await).parse(cursor)
-            }
+            TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor),
             TokenKind::Punctuator(Punctuator::OpenParen) => {
                 let expr =
                     Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
