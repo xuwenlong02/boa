@@ -1,9 +1,22 @@
-use crate::builtins::object::{Object, ObjectInternalMethods, ObjectKind, PROTOTYPE};
-use crate::builtins::property::Property;
-use crate::builtins::value::{same_value, to_value, Value, ValueData};
-use gc::Gc;
+use crate::{
+    builtins::{
+        object::{Object, ObjectInternalMethods, ObjectKind, PROTOTYPE},
+        property::Property,
+        value::{same_value, to_value, undefined, ResultValue, Value, ValueData},
+    },
+    environment::lexical_environment::Environment,
+    realm::Realm,
+    syntax::ast::node::{FormalParameter, Node},
+    Interpreter,
+};
+
+use gc::{custom_trace, Gc};
 use gc_derive::{Finalize, Trace};
 use std::collections::HashMap;
+use std::fmt::{self, Debug};
+
+/// _fn(this, arguments, ctx) -> ResultValue_ - The signature of a built-in function
+pub type NativeFunctionData = fn(&Value, &[Value], &mut Interpreter) -> ResultValue;
 /// Sets the functionKind
 #[derive(Trace, Finalize, Debug, Clone)]
 pub enum FunctionKind {
@@ -27,9 +40,17 @@ pub enum ThisMode {
     Strict,
     Global,
 }
+
+/// FunctionBody is Boa specific, it will either be Rust code or JavaScript code (Block Node)
+#[derive(Clone)]
+pub enum FunctionBody {
+    BuiltIn(NativeFunctionData),
+    Ordinary(Node),
+}
+
 /// Boa representation of a Function Object.   
 /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects>
-#[derive(Trace, Finalize, Debug, Clone)]
+#[derive(Finalize, Clone)]
 pub struct Function {
     /// Kind, this *may* not be needed but will keep for now
     pub kind: ObjectKind,
@@ -41,13 +62,29 @@ pub struct Function {
     pub function_kind: FunctionKind,
     /// is constructor??
     pub is_constructor: bool,
+    /// Function Body
+    pub body: FunctionBody,
+    /// Formal Paramaters
+    pub params: Vec<FormalParameter>,
+    /// This Mode
+    pub this_mode: ThisMode,
+    /// Reference to the current Environment Record
+    pub environment: Environment,
 }
 
 impl Function {
-    /// https://tc39.es/ecma262/#sec-functionallocate
-    pub fn allocate(proto: Value, mut kind: FunctionKind) -> Function {
+    /// This will create an ordinary function object
+    ///
+    /// <https://tc39.es/ecma262/#sec-ordinaryfunctioncreate>
+    pub fn create_ordinary(
+        proto: Value,
+        parameter_list: Vec<FormalParameter>,
+        body: FunctionBody,
+        this_mode: ThisMode,
+        realm: &mut Realm,
+        mut kind: FunctionKind,
+    ) -> Function {
         let needs_construct: bool;
-
         match kind {
             FunctionKind::Normal => needs_construct = true,
             FunctionKind::NonConstructor => {
@@ -57,23 +94,40 @@ impl Function {
             _ => needs_construct = false,
         }
 
+        // Create length property and set it's value
+        let length_property = Property::new()
+            .writable(false)
+            .enumerable(false)
+            .configurable(true)
+            .value(to_value(parameter_list.len()));
+
         let mut func = Function {
             kind: ObjectKind::Function,
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
             function_kind: kind,
             is_constructor: needs_construct,
+            body,
+            environment: realm.environment.get_current_environment().clone(),
+            params: parameter_list,
+            this_mode,
         };
 
         func.set_internal_slot("extensible", to_value(true));
         func.set_internal_slot(PROTOTYPE, to_value(proto.clone()));
-        // TODO: set to current realm record
+        func.set_internal_slot("home_object", to_value(undefined()));
+
+        func.define_own_property(String::from("length"), length_property);
         func
     }
 }
 
+unsafe impl gc::Trace for Function {
+    custom_trace!(this, mark(&this.properties));
+}
+
 impl ObjectInternalMethods for Function {
-    /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v
+    /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v>
     fn set_prototype_of(&mut self, val: Value) -> bool {
         debug_assert!(val.is_object() || val.is_null());
         let current = self.get_internal_slot(PROTOTYPE);
@@ -99,7 +153,7 @@ impl ObjectInternalMethods for Function {
         true
     }
 
-    /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p
+    /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p>
     /// The specification returns a Property Descriptor or Undefined. These are 2 separate types and we can't do that here.
     fn get_own_property(&self, prop: &Value) -> Property {
         debug_assert!(Property::is_property_key(prop));
@@ -145,6 +199,24 @@ impl ObjectInternalMethods for Function {
     /// Utility function to set an internal slot
     fn set_internal_slot(&mut self, name: &str, val: Value) {
         self.internal_slots.insert(name.to_string(), val);
+    }
+}
+
+impl Debug for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+        for (key, val) in self.properties.iter() {
+            write!(
+                f,
+                "{}: {}",
+                key,
+                val.value
+                    .as_ref()
+                    .unwrap_or(&Gc::new(ValueData::Undefined))
+                    .clone()
+            )?;
+        }
+        write!(f, "}}")
     }
 }
 
