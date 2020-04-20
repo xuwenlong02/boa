@@ -11,7 +11,7 @@ use crate::{
     Interpreter,
 };
 
-use gc::{custom_trace, Gc};
+use gc::{unsafe_empty_trace, Gc, Trace as TraceTrait};
 use gc_derive::{Finalize, Trace};
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
@@ -37,22 +37,26 @@ pub enum ConstructorKind {
 /// Defines how this references are interpreted within the formal parameters and code body of the function.
 ///
 /// Arrow functions don't define a `this` and thus are lexical, `function`s do define a this and thus are NonLexical
-#[derive(Debug, Copy, Clone)]
+#[derive(Trace, Finalize, Debug, Clone)]
 pub enum ThisMode {
     Lexical,
     NonLexical,
 }
 
 /// FunctionBody is specific to this interpreter, it will either be Rust code or JavaScript code (AST Node)
-#[derive(Clone)]
+#[derive(Clone, Finalize)]
 pub enum FunctionBody {
     BuiltIn(NativeFunctionData),
     Ordinary(Node),
 }
 
+unsafe impl TraceTrait for FunctionBody {
+    unsafe_empty_trace!();
+}
+
 /// Boa representation of a Function Object.   
 /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects>
-#[derive(Finalize, Clone)]
+#[derive(Trace, Finalize, Clone)]
 pub struct Function {
     /// Internal Slots
     pub internal_slots: Box<HashMap<String, Value>>,
@@ -216,9 +220,9 @@ impl Function {
     }
 }
 
-unsafe impl gc::Trace for Function {
-    custom_trace!(this, mark(&this.properties));
-}
+// unsafe impl gc::Trace for Function {
+//     custom_trace!(this, mark(&this.is_constructor));
+// }
 
 impl ObjectInternalMethods for Function {
     /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v>
