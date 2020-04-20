@@ -52,7 +52,8 @@ pub enum FunctionBody {
 
 // This is indeed safe, but we need to mark this as an empty trace because
 // NativeFunctionData doesn't hold any GC'd objects, but Gc doesn't know that
-// So we need to signal it manually
+// So we need to signal it manually.
+// rust-gc does not have an impl for fn(_, _, _)
 unsafe impl TraceTrait for FunctionBody {
     unsafe_empty_trace!();
 }
@@ -225,10 +226,6 @@ impl Function {
             .initialize_binding(&param.name, value.clone());
     }
 }
-
-// unsafe impl gc::Trace for Function {
-//     custom_trace!(this, mark(&this.is_constructor));
-// }
 
 impl ObjectInternalMethods for Function {
     /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v>
