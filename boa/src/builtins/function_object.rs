@@ -34,13 +34,15 @@ pub enum ConstructorKind {
     Derived,
 }
 /// Defines how this references are interpreted within the formal parameters and code body of the function.
+///
+/// Arrow functions don't define a `this` and thus are lexical, `function`s do define a this and thus are NonLexical
 #[derive(Debug, Copy, Clone)]
 pub enum ThisMode {
     Lexical,
     NonLexical,
 }
 
-/// FunctionBody is Boa specific, it will either be Rust code or JavaScript code (Block Node)
+/// FunctionBody is specific to this interpreter, it will either be Rust code or JavaScript code (AST Node)
 #[derive(Clone)]
 pub enum FunctionBody {
     BuiltIn(NativeFunctionData),
