@@ -53,8 +53,6 @@ pub enum FunctionBody {
 /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects>
 #[derive(Finalize, Clone)]
 pub struct Function {
-    /// Kind, this *may* not be needed but will keep for now
-    pub kind: ObjectKind,
     /// Internal Slots
     pub internal_slots: Box<HashMap<String, Value>>,
     /// Properties
@@ -103,7 +101,6 @@ impl Function {
             .value(to_value(parameter_list.len()));
 
         let mut func = Function {
-            kind: ObjectKind::Function,
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
             function_kind: kind,
@@ -262,6 +259,7 @@ impl Debug for Function {
 /// <https://tc39.es/ecma262/#sec-properties-of-the-function-prototype-object>
 pub fn create_function_prototype() {
     let mut function_prototype: Object = Object::default();
-    // Set Kind to function
+    // Set Kind to function (for historical & compatibility reasons)
+    // https://tc39.es/ecma262/#sec-properties-of-the-function-prototype-object
     function_prototype.kind = ObjectKind::Function;
 }
