@@ -155,35 +155,38 @@ impl Function {
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
-        match self.body {
-            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
-            FunctionBody::Ordinary(ref body) => {
-                // Add argument bindings to the function environment
-                for i in 0..self.params.len() {
-                    let param = self.params.get(i).expect("Could not get param");
-                    // Rest Parameters
-                    if param.is_rest_param {
-                        self.add_rest_param(param, i, args_list, interpreter);
-                        break;
-                    }
-
-                    let value = args_list.get(i).expect("Could not get value");
-
-                    self.add_arguments_to_environment(param, value.clone());
-                }
-
-                // Add arguments object
-                let arguments_obj = create_unmapped_arguments_object(args_list);
-                self.get_environment()
-                    .borrow_mut()
-                    .create_mutable_binding("arguments".to_string(), false);
-                self.get_environment()
-                    .borrow_mut()
-                    .initialize_binding("arguments", arguments_obj);
-
-                interpreter.run(body)
+        // Add argument bindings to the function environment
+        for i in 0..self.params.len() {
+            let param = self.params.get(i).expect("Could not get param");
+            // Rest Parameters
+            if param.is_rest_param {
+                self.add_rest_param(param, i, args_list, interpreter);
+                break;
             }
+
+            let value = args_list.get(i).expect("Could not get value");
+
+            self.add_arguments_to_environment(param, value.clone());
         }
+
+        // Add arguments object
+        let arguments_obj = create_unmapped_arguments_object(args_list);
+        self.get_environment()
+            .borrow_mut()
+            .create_mutable_binding("arguments".to_string(), false);
+        self.get_environment()
+            .borrow_mut()
+            .initialize_binding("arguments", arguments_obj);
+
+        interpreter.realm.environment.push(self.get_environment());
+
+        let result = match self.body {
+            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+            FunctionBody::Ordinary(ref body) => interpreter.run(body),
+        };
+
+        interpreter.realm.environment.pop();
+        result
     }
 
     // Adds the final rest parameters to the Environment as an array
