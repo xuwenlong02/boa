@@ -37,8 +37,7 @@ pub enum ConstructorKind {
 #[derive(Debug, Copy, Clone)]
 pub enum ThisMode {
     Lexical,
-    Strict,
-    Global,
+    NonLexical,
 }
 
 /// FunctionBody is Boa specific, it will either be Rust code or JavaScript code (Block Node)
@@ -68,8 +67,8 @@ pub struct Function {
     pub params: Vec<FormalParameter>,
     /// This Mode
     pub this_mode: ThisMode,
-    /// Reference to the current Environment Record
-    pub environment: Environment,
+    // Environment
+    pub environment: Option<Environment>,
 }
 
 impl Function {
@@ -108,7 +107,7 @@ impl Function {
             function_kind: kind,
             is_constructor: needs_construct,
             body,
-            environment: realm.environment.get_current_environment().clone(),
+            environment: None,
             params: parameter_list,
             this_mode,
         };
@@ -119,6 +118,43 @@ impl Function {
 
         func.define_own_property(String::from("length"), length_property);
         func
+    }
+
+    /// Sets the current environment on this function object
+    ///
+    /// This should be set after creating struct instance.
+    /// Environment can't be an internal slot due to it not being a JSValue
+    pub fn set_environment(&mut self, env: Environment) {
+        self.environment = Some(env);
+    }
+
+    /// Fetches the current environment on this function.
+    ///
+    /// The environment should be a Function Declarative Record
+    ///
+    /// It should exist, if not it will panic
+    pub fn get_environment(&self) -> Environment {
+        match self.environment {
+            Some(v) => v,
+            None => panic!("No environment set on Function!"),
+        }
+    }
+
+    /// This will handle calls for both ordinary and built-in functions
+    ///
+    /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-call-thisargument-argumentslist>
+    pub fn call(
+        &self,
+        this: &Value,
+        args_list: &Vec<Value>,
+        interpreter: &mut Interpreter,
+    ) -> ResultValue {
+        // Is this a built-in function?
+        if let FunctionBody::BuiltIn(func) = self.body {
+            return func(this, args_list, interpreter);
+        }
+
+        Ok(undefined())
     }
 }
 

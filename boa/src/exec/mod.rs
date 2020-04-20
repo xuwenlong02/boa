@@ -7,6 +7,7 @@ use crate::{
     builtins::{
         array,
         function::{create_unmapped_arguments_object, Function, RegularFunction},
+        function_object::{Function as FunctionObject, FunctionBody, FunctionKind, ThisMode},
         object::{
             internal_methods_trait::ObjectInternalMethods, ObjectKind, INSTANCE_PROTOTYPE,
             PROTOTYPE,
@@ -258,20 +259,50 @@ impl Executor for Interpreter {
                 Ok(array)
             }
             Node::FunctionDecl(ref name, ref args, ref expr) => {
-                let function =
-                    Function::RegularFunc(RegularFunction::new(*expr.clone(), args.to_vec()));
-                let val = Gc::new(ValueData::Function(Box::new(GcCell::new(function))));
+                // Todo: Function.prototype doesn't exist yet, so the prototype right now is the Object.prototype
+                let proto = &self
+                    .realm
+                    .environment
+                    .get_global_object()
+                    .expect("Could not get the global object")
+                    .get_field_slice("Object")
+                    .get_field_slice("Prototype");
+
+                let func = FunctionObject::create_ordinary(
+                    proto.clone(),
+                    args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
+                    FunctionBody::Ordinary(*expr.clone()),
+                    ThisMode::Lexical,
+                    &mut self.realm,
+                    FunctionKind::Normal,
+                );
+
+                let val = Gc::new(ValueData::FunctionObj(Box::new(func)));
+
+                // Create a new function environment
+                let func_env = new_function_environment(
+                    val.clone(),
+                    Gc::new(ValueData::Undefined),
+                    Some(self.realm.environment.get_current_environment().clone()),
+                );
+
+                // Set the environment in an internal slot
+                val.borrow().set_internal_slot("environment", func_env);
+
+                // Set the name and assign it in the current environment
                 if name.is_some() {
                     self.realm.environment.create_mutable_binding(
                         name.clone().expect("No name was supplied"),
                         false,
                         VariableScope::Function,
                     );
+
                     self.realm.environment.initialize_binding(
                         name.as_ref().expect("Could not get name as reference"),
                         val.clone(),
                     )
                 }
+
                 Ok(val)
             }
             Node::ArrowFunctionDecl(ref args, ref expr) => {
