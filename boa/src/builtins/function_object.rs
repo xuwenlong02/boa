@@ -6,6 +6,7 @@ use crate::{
         value::{same_value, to_value, undefined, ResultValue, Value, ValueData},
     },
     environment::lexical_environment::Environment,
+    exec::Executor,
     syntax::ast::node::{FormalParameter, Node},
     Interpreter,
 };
@@ -147,28 +148,38 @@ impl Function {
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
-        // Is this a built-in function?
-        // If so just call native method
-        if let FunctionBody::BuiltIn(func) = self.body {
-            return func(this, args_list, interpreter);
-        }
+        match self.body {
+            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+            FunctionBody::Ordinary(ref body) => {
+                // Add argument bindings to the function environment
+                for i in 0..self.params.len() {
+                    let param = self.params.get(i).expect("Could not get param");
+                    // Rest Parameters
+                    if param.is_rest_param {
+                        self.add_rest_param(param, i, args_list, interpreter);
+                        break;
+                    }
 
-        // Add argument bindings to the function environment
-        for i in 0..self.params.len() {
-            let param = self.params.get(i).expect("Could not get param");
-            // Rest Parameters
-            if param.is_rest_param {
-                self.add_rest_param(param, i, args_list, interpreter);
-                break;
+                    let value = args_list.get(i).expect("Could not get value");
+
+                    self.add_arguments_to_environment(param, value.clone());
+                }
+
+                // Add arguments object
+                let arguments_obj = create_unmapped_arguments_object(args_list);
+                self.get_environment()
+                    .borrow_mut()
+                    .create_mutable_binding("arguments".to_string(), false);
+                self.get_environment()
+                    .borrow_mut()
+                    .initialize_binding("arguments", arguments_obj);
+
+                interpreter.run(body)
             }
-
-            let value = args_list.get(i).expect("Could not get value");
-
-            self.add_arguments_to_environment(param, value.clone());
         }
-        Ok(undefined())
     }
 
+    // Adds the final rest parameters to the Environment as an array
     fn add_rest_param(
         &self,
         param: &FormalParameter,
@@ -191,6 +202,7 @@ impl Function {
             .initialize_binding(&param.name, array);
     }
 
+    // Adds an argument to the environment
     fn add_arguments_to_environment(&self, param: &FormalParameter, value: Value) {
         // Create binding
         self.get_environment()
@@ -309,4 +321,32 @@ pub fn create_function_prototype() {
     // Set Kind to function (for historical & compatibility reasons)
     // https://tc39.es/ecma262/#sec-properties-of-the-function-prototype-object
     function_prototype.kind = ObjectKind::Function;
+}
+
+/// Arguments
+/// https://tc39.es/ecma262/#sec-createunmappedargumentsobject
+pub fn create_unmapped_arguments_object(arguments_list: &Vec<Value>) -> Value {
+    let len = arguments_list.len();
+    let mut obj = Object::default();
+    obj.set_internal_slot("ParameterMap", Gc::new(ValueData::Undefined));
+    // Set length
+    let mut length = Property::default();
+    length = length.writable(true).value(to_value(len));
+    // Define length as a property
+    obj.define_own_property("length".to_string(), length);
+    let mut index: usize = 0;
+    while index < len {
+        let val = arguments_list.get(index).expect("Could not get argument");
+        let mut prop = Property::default();
+        prop = prop
+            .value(val.clone())
+            .enumerable(true)
+            .writable(true)
+            .configurable(true);
+
+        obj.properties.insert(index.to_string(), prop);
+        index += 1;
+    }
+
+    to_value(obj)
 }

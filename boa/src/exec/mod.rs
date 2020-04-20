@@ -619,6 +619,9 @@ impl Interpreter {
         // All functions should be objects, and eventually will be.
         // During this transition call will support both native functions and function objects
         match (*f).deref() {
+            ValueData::FunctionObj(func) => {
+                func.borrow_mut().deref_mut().call(f, &arguments_list, self)
+            }
             ValueData::Object(ref obj) => {
                 let func: Value = obj.borrow_mut().deref_mut().get_internal_slot("call");
                 if !func.is_undefined() {
