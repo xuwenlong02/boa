@@ -53,7 +53,8 @@ pub enum FunctionBody {
 // This is indeed safe, but we need to mark this as an empty trace because
 // NativeFunctionData doesn't hold any GC'd objects, but Gc doesn't know that
 // So we need to signal it manually.
-// rust-gc does not have an impl for fn(_, _, _)
+// rust-gc does not have a Trace impl for fn(_, _, _)
+// https://github.com/Manishearth/rust-gc/blob/master/gc/src/trace.rs
 unsafe impl TraceTrait for FunctionBody {
     unsafe_empty_trace!();
 }
