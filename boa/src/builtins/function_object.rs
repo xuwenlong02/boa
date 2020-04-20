@@ -50,6 +50,9 @@ pub enum FunctionBody {
     Ordinary(Node),
 }
 
+// This is indeed safe, but we need to mark this as an empty trace because
+// NativeFunctionData doesn't hold any GC'd objects, but Gc doesn't know that
+// So we need to signal it manually
 unsafe impl TraceTrait for FunctionBody {
     unsafe_empty_trace!();
 }
