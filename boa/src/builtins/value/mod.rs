@@ -56,7 +56,7 @@ pub enum ValueData {
     Object(GcCell<Object>),
     /// `Function` - A runnable block of code, such as `Math.sqrt`, which can take some variables and return a useful value or act upon an object
     Function(Box<GcCell<Function>>),
-    FunctionObj(Box<FunctionObj>),
+    FunctionObj(GcCell<FunctionObj>),
     /// `Symbol` - A Symbol Type - Internally Symbols are similar to objects, except there are no properties, only internal slots
     Symbol(GcCell<Object>),
 }
@@ -1145,14 +1145,14 @@ impl FromValue for Object {
 
 impl ToValue for FunctionObj {
     fn to_value(&self) -> Value {
-        Gc::new(ValueData::FunctionObj(Box::new(self.clone())))
+        Gc::new(ValueData::FunctionObj(GcCell::new(self.clone())))
     }
 }
 
 impl FromValue for FunctionObj {
     fn from_value(v: Value) -> Result<Self, &'static str> {
         match *v {
-            ValueData::FunctionObj(ref func) => Ok(*func.clone()),
+            ValueData::FunctionObj(ref func) => Ok(func.clone().into_inner()),
             _ => Err("Value is not a valid object"),
         }
     }

@@ -273,11 +273,10 @@ impl Executor for Interpreter {
                     args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
                     FunctionBody::Ordinary(*expr.clone()),
                     ThisMode::Lexical,
-                    &mut self.realm,
                     FunctionKind::Normal,
                 );
 
-                let val = Gc::new(ValueData::FunctionObj(Box::new(func)));
+                let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
 
                 // Create a new function environment
                 let func_env = new_function_environment(
@@ -286,8 +285,10 @@ impl Executor for Interpreter {
                     Some(self.realm.environment.get_current_environment().clone()),
                 );
 
-                // Set the environment in an internal slot
-                val.borrow().set_internal_slot("environment", func_env);
+                // Set the environment in the property of Function
+                if let ValueData::FunctionObj(ref func) = *val {
+                    func.borrow_mut().set_environment(func_env);
+                }
 
                 // Set the name and assign it in the current environment
                 if name.is_some() {

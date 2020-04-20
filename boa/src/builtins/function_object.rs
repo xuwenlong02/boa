@@ -1,11 +1,11 @@
 use crate::{
     builtins::{
+        array,
         object::{Object, ObjectInternalMethods, ObjectKind, PROTOTYPE},
         property::Property,
         value::{same_value, to_value, undefined, ResultValue, Value, ValueData},
     },
     environment::lexical_environment::Environment,
-    realm::Realm,
     syntax::ast::node::{FormalParameter, Node},
     Interpreter,
 };
@@ -80,7 +80,6 @@ impl Function {
         parameter_list: Vec<FormalParameter>,
         body: FunctionBody,
         this_mode: ThisMode,
-        realm: &mut Realm,
         mut kind: FunctionKind,
     ) -> Function {
         let needs_construct: bool;
@@ -133,7 +132,7 @@ impl Function {
     ///
     /// It should exist, if not it will panic
     pub fn get_environment(&self) -> Environment {
-        match self.environment {
+        match self.environment.clone() {
             Some(v) => v,
             None => panic!("No environment set on Function!"),
         }
@@ -149,11 +148,59 @@ impl Function {
         interpreter: &mut Interpreter,
     ) -> ResultValue {
         // Is this a built-in function?
+        // If so just call native method
         if let FunctionBody::BuiltIn(func) = self.body {
             return func(this, args_list, interpreter);
         }
 
+        // Add argument bindings to the function environment
+        for i in 0..self.params.len() {
+            let param = self.params.get(i).expect("Could not get param");
+            // Rest Parameters
+            if param.is_rest_param {
+                self.add_rest_param(param, i, args_list, interpreter);
+                break;
+            }
+
+            let value = args_list.get(i).expect("Could not get value");
+
+            self.add_arguments_to_environment(param, value.clone());
+        }
         Ok(undefined())
+    }
+
+    fn add_rest_param(
+        &self,
+        param: &FormalParameter,
+        index: usize,
+        args_list: &Vec<Value>,
+        interpreter: &mut Interpreter,
+    ) {
+        // Create array of values
+        let array = array::new_array(interpreter).unwrap();
+        array::add_to_array_object(&array, &args_list[index..]).unwrap();
+
+        // Create binding
+        self.get_environment()
+            .borrow_mut()
+            .create_mutable_binding(param.name.clone(), false);
+
+        // Set Binding to value
+        self.get_environment()
+            .borrow_mut()
+            .initialize_binding(&param.name, array);
+    }
+
+    fn add_arguments_to_environment(&self, param: &FormalParameter, value: Value) {
+        // Create binding
+        self.get_environment()
+            .borrow_mut()
+            .create_mutable_binding(param.name.clone(), false);
+
+        // Set Binding to value
+        self.get_environment()
+            .borrow_mut()
+            .initialize_binding(&param.name, value.clone());
     }
 }
 
