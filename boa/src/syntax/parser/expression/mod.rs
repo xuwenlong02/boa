@@ -41,7 +41,6 @@ macro_rules! expression { ($name:ident, $lower:ident, [$( $op:path ),*], [$( $lo
                 match tok.kind {
                     TokenKind::Punctuator(op) if $( op == $op )||* => {
                         let _ = cursor.next_skip_lineterminator().expect("token disappeared");
-                        dbg!(op);
                         lhs = Node::bin_op(
                             op.as_binop().expect("could not get binary operation"),
                             lhs,
