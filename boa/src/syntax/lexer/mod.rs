@@ -14,14 +14,15 @@ use std::{
     char::{decode_utf16, from_u32},
     error, fmt,
     iter::Peekable,
-    str::{Chars, FromStr},
+    str::{self, Bytes, FromStr},
+    u8,
 };
 
 macro_rules! vop {
     ($this:ident, $assign_op:expr, $op:expr) => ({
         let preview = $this.preview_next().ok_or_else(|| LexerError::new("Could not preview next value"))?;
         match preview {
-            '=' => {
+            b'=' => {
                 $this.next();
                 $this.column_number += 1;
                 $assign_op
@@ -32,7 +33,7 @@ macro_rules! vop {
     ($this:ident, $assign_op:expr, $op:expr, {$($case:pat => $block:expr), +}) => ({
         let preview = $this.preview_next().ok_or_else(|| LexerError::new("Could not preview next value"))?;
         match preview {
-            '=' => {
+            b'=' => {
                 $this.next();
                 $this.column_number += 1;
                 $assign_op
@@ -80,9 +81,12 @@ pub struct LexerError {
 }
 
 impl LexerError {
-    fn new(msg: &str) -> Self {
+    fn new<M>(msg: M) -> Self
+    where
+        M: Into<String>,
+    {
         Self {
-            details: msg.to_string(),
+            details: msg.into(),
         }
     }
 }
@@ -107,14 +111,14 @@ impl error::Error for LexerError {
 /// A lexical analyzer for JavaScript source code
 #[derive(Debug)]
 pub struct Lexer<'a> {
-    // The list fo tokens generated so far
+    /// The list of tokens generated so far.
     pub tokens: Vec<Token>,
-    // The current line number in the script
+    /// The current line number in the script.
     line_number: u64,
-    // the current column number in the script
+    /// The current column number in the script.
     column_number: u64,
-    // The full string
-    buffer: Peekable<Chars<'a>>,
+    /// The full source code as a byte iterator.
+    buffer: Peekable<Bytes<'a>>,
 }
 
 impl<'a> Lexer<'a> {
@@ -136,7 +140,7 @@ impl<'a> Lexer<'a> {
             tokens: Vec::new(),
             line_number: 1,
             column_number: 0,
-            buffer: buffer.chars().peekable(),
+            buffer: buffer.bytes().peekable(),
         }
     }
 
@@ -152,7 +156,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// next fetches the next token and return it, or a LexerError if there are no more.
-    fn next(&mut self) -> char {
+    fn next(&mut self) -> u8 {
         self.buffer.next().expect(
             "No more more characters to consume from input stream, \
              use preview_next() first to check before calling next()",
@@ -160,12 +164,12 @@ impl<'a> Lexer<'a> {
     }
 
     /// Preview the next character but don't actually increment
-    fn preview_next(&mut self) -> Option<char> {
+    fn preview_next(&mut self) -> Option<u8> {
         self.buffer.peek().copied()
     }
 
     /// Preview a char x indexes further in buf, without incrementing
-    fn preview_multiple_next(&mut self, nb_next: usize) -> Option<char> {
+    fn preview_multiple_next(&mut self, nb_next: usize) -> Option<u8> {
         let mut next_peek = None;
 
         for (i, x) in self.buffer.clone().enumerate() {
@@ -179,24 +183,24 @@ impl<'a> Lexer<'a> {
         next_peek
     }
 
-    /// Utility Function, while ``f(char)`` is true, read chars and move curser.
+    /// Utility Function, while ``f(u8)`` is true, read chars and move curser.
     /// All chars are returned as a string
-    fn take_char_while<F>(&mut self, mut f: F) -> Result<String, LexerError>
+    fn take_byte_while<F>(&mut self, mut f: F) -> Result<String, LexerError>
     where
-        F: FnMut(char) -> bool,
+        F: FnMut(&u8) -> bool,
     {
-        let mut s = String::new();
+        let mut bytes = Vec::new();
         while self.buffer.peek().is_some()
-            && f(self.preview_next().expect("Could not preview next value"))
+            && f(&self.preview_next().expect("Could not preview next value"))
         {
-            s.push(self.next());
+            bytes.push(self.next());
         }
 
-        Ok(s)
+        String::from_utf8(bytes).map_err(|e| LexerError::new(e.to_string()))
     }
 
     /// Compares the character passed in to the next character, if they match true is returned and the buffer is incremented
-    fn next_is(&mut self, peek: char) -> bool {
+    fn next_is(&mut self, peek: u8) -> bool {
         let result = self.preview_next() == Some(peek);
         if result {
             self.buffer.next();
@@ -204,23 +208,33 @@ impl<'a> Lexer<'a> {
         result
     }
 
-    fn read_integer_in_base(&mut self, base: u32, mut buf: String) -> Result<u64, LexerError> {
+    /// Checks if the given byte is an ASCII digit with a given radix.
+    fn is_ascii_digit(byte: u8, radix: u32) -> bool {
+        char::from(byte).is_digit(radix)
+    }
+
+    /// Reads an integer with the given radix.
+    fn read_integer_radix(&mut self, radix: u32) -> Result<u64, LexerError> {
         self.next();
+        let mut buf = Vec::new();
         while let Some(ch) = self.preview_next() {
-            if ch.is_digit(base) {
+            if Self::is_ascii_digit(ch, radix) {
                 buf.push(self.next());
             } else {
                 break;
             }
         }
-        u64::from_str_radix(&buf, base)
-            .map_err(|_| LexerError::new("Could not convert value to u64"))
+        u64::from_str_radix(
+            str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?,
+            radix,
+        )
+        .map_err(|_| LexerError::new("Could not convert value to u64"))
     }
 
     fn check_after_numeric_literal(&mut self) -> Result<(), LexerError> {
         match self.preview_next() {
             Some(ch)
-                if ch.is_ascii_alphabetic() || ch == '$' || ch == '_' || ch.is_ascii_digit() =>
+                if ch.is_ascii_alphabetic() || ch == b'$' || ch == b'_' || ch.is_ascii_digit() =>
             {
                 Err(LexerError::new("NumericLiteral token must not be followed by IdentifierStart nor DecimalDigit characters"))
             }
@@ -238,39 +252,39 @@ impl<'a> Lexer<'a> {
             self.column_number += 1;
             let ch = self.next();
             match ch {
-                '"' | '\'' => {
+                b'"' | b'\'' => {
                     let mut buf = String::new();
                     loop {
                         if self.preview_next().is_none() {
                             return Err(LexerError::new("Unterminated String"));
                         }
                         match self.next() {
-                            '\'' if ch == '\'' => {
+                            b'\'' if ch == b'\'' => {
                                 break;
                             }
-                            '"' if ch == '"' => {
+                            b'"' if ch == b'"' => {
                                 break;
                             }
-                            '\\' => {
+                            b'\\' => {
                                 if self.preview_next().is_none() {
                                     return Err(LexerError::new("Unterminated String"));
                                 }
                                 let escape = self.next();
-                                if escape != '\n' {
+                                if escape != b'\n' {
                                     let escaped_ch = match escape {
-                                        'n' => '\n',
-                                        'r' => '\r',
-                                        't' => '\t',
-                                        'b' => '\x08',
-                                        'f' => '\x0c',
-                                        '0' => '\0',
-                                        'x' => {
+                                        b'n' => '\n',
+                                        b'r' => '\r',
+                                        b't' => '\t',
+                                        b'b' => '\x08',
+                                        b'f' => '\x0c',
+                                        b'0' => '\0',
+                                        b'x' => {
                                             let mut nums = String::with_capacity(2);
                                             for _ in 0_u8..2 {
                                                 if self.preview_next().is_none() {
                                                     return Err(LexerError::new("Unterminated String"));
                                                 }
-                                                nums.push(self.next());
+                                                nums.push(char::from(self.next()));
                                             }
                                             self.column_number += 2;
                                             let as_num = match u64::from_str_radix(&nums, 16) {
@@ -285,16 +299,16 @@ impl<'a> Lexer<'a> {
                                                 ),
                                             }
                                         }
-                                        'u' => {
+                                        b'u' => {
                                             // There are 2 types of codepoints. Surragate codepoints and unicode codepoints.
                                             // UTF-16 could be surrogate codepoints, "\uXXXX\uXXXX" which make up a single unicode codepoint.
                                             // We will need to loop to make sure we catch all UTF-16 codepoints
                                             // Example Test: https://github.com/tc39/test262/blob/ee3715ee56744ccc8aeb22a921f442e98090b3c1/implementation-contributed/v8/mjsunit/es6/unicode-escapes.js#L39-L44
 
                                             // Support \u{X..X} (Unicode Codepoint)
-                                            if self.next_is('{') {
+                                            if self.next_is(b'{') {
                                                 let s = self
-                                                    .take_char_while(char::is_alphanumeric)
+                                                    .take_byte_while(u8::is_ascii_alphanumeric)
                                                     .expect("Could not read chars");
 
                                                 // We know this is a single unicode codepoint, convert to u32
@@ -316,7 +330,7 @@ impl<'a> Lexer<'a> {
                                                 loop {
                                                     // Collect each character after \u e.g \uD83D will give "D83D"
                                                     let s = self
-                                                        .take_char_while(char::is_alphanumeric)
+                                                        .take_byte_while(u8::is_ascii_alphanumeric)
                                                         .expect("Could not read chars");
 
                                                     // Convert to u16
@@ -330,7 +344,7 @@ impl<'a> Lexer<'a> {
                                                         (s.len() as u64).wrapping_add(2);
 
                                                     // Check for another UTF-16 codepoint
-                                                    if self.next_is('\\') && self.next_is('u') {
+                                                    if self.next_is(b'\\') && self.next_is(b'u') {
                                                         continue;
                                                     }
                                                     break;
@@ -344,7 +358,7 @@ impl<'a> Lexer<'a> {
                                                     .expect("Could not get next codepoint")
                                             }
                                         }
-                                        '\'' | '"' | '\\' => escape,
+                                        b'\'' | b'"' | b'\\' => char::from(escape),
                                         ch => {
                                             let details = format!("{}:{}: Invalid escape `{}`", self.line_number, self.column_number, ch);
                                             return Err(LexerError { details });
@@ -353,7 +367,7 @@ impl<'a> Lexer<'a> {
                                     buf.push(escaped_ch);
                                 }
                             }
-                            next_ch => buf.push(next_ch),
+                            next_ch => buf.push(char::from(next_ch)),
                         }
                     }
                     let str_length = buf.len() as u64;
@@ -363,33 +377,32 @@ impl<'a> Lexer<'a> {
                     // to compensate for the incrementing at the top
                     self.column_number += str_length.wrapping_add(1);
                 }
-                '0' => {
-                    let mut buf = String::new();
-
+                b'0' => {
                     let num = match self.preview_next() {
                         None => {
                             self.push_token(TokenKind::NumericLiteral(0_f64));
                             return Ok(());
                         }
-                        Some('x') | Some('X') => {
-                            self.read_integer_in_base(16, buf)? as f64
+                        Some(b'x') | Some(b'X') => {
+                            self.read_integer_radix(16)? as f64
                         }
-                        Some('o') | Some('O') => {
-                            self.read_integer_in_base(8, buf)? as f64
+                        Some(b'o') | Some(b'O') => {
+                            self.read_integer_radix(8)? as f64
                         }
-                        Some('b') | Some('B') => {
-                            self.read_integer_in_base(2, buf)? as f64
+                        Some(b'b') | Some(b'B') => {
+                            self.read_integer_radix(2)? as f64
                         }
-                        Some(ch) if (ch.is_ascii_digit() || ch == '.') => {
+                        Some(ch) if (ch.is_ascii_digit() || ch == b'.') => {
+                            let mut buf = Vec::new();
                             // LEGACY OCTAL (ONLY FOR NON-STRICT MODE)
-                            let mut gone_decimal = ch == '.';
+                            let mut gone_decimal = ch == b'.';
                             while let Some(next_ch) = self.preview_next() {
                                 match next_ch {
-                                    c if next_ch.is_digit(8) => {
+                                    c if Self::is_ascii_digit(next_ch, 8) => {
                                         buf.push(c);
                                         self.next();
                                     }
-                                    '8' | '9' | '.' => {
+                                    b'8' | b'9' | b'.' => {
                                         gone_decimal = true;
                                         buf.push(next_ch);
                                         self.next();
@@ -400,11 +413,11 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             if gone_decimal {
-                                f64::from_str(&buf).map_err(|_e| LexerError::new("Could not convert value to f64"))?
+                                f64::from_str(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?).map_err(|_e| LexerError::new("Could not convert value to f64"))?
                             } else if buf.is_empty() {
                                 0.0
                             } else {
-                                (u64::from_str_radix(&buf, 8).map_err(|_e| LexerError::new("Could not convert value to u64"))?) as f64
+                                (u64::from_str_radix(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?, 8).map_err(|_e| LexerError::new("Could not convert value to u64"))?) as f64
                             }
                         }
                         Some(_) => {
@@ -419,11 +432,11 @@ impl<'a> Lexer<'a> {
                         return Err(e)
                     };
                 }
-                _ if ch.is_digit(10) => {
-                    let mut buf = ch.to_string();
+                _ if Self::is_ascii_digit(ch, 10) => {
+                    let mut buf = vec![ch];
                     'digitloop: while let Some(ch) = self.preview_next() {
                         match ch {
-                            '.' => loop {
+                            b'.' => loop {
                                 buf.push(self.next());
 
                                 let c = match self.preview_next() {
@@ -432,8 +445,8 @@ impl<'a> Lexer<'a> {
                                 };
 
                                 match c {
-                                    'e' | 'E' => {
-                                        match self.preview_multiple_next(2).unwrap_or_default().to_digit(10) {
+                                    b'e' | b'E' => {
+                                        match self.preview_multiple_next(2).map(char::from).unwrap_or_default().to_digit(10) {
                                             Some(0..=9) | None => {
                                                 buf.push(self.next());
                                               }
@@ -443,14 +456,14 @@ impl<'a> Lexer<'a> {
                                         }
                                     }
                                     _ => {
-                                        if !c.is_digit(10) {
+                                        if !Self::is_ascii_digit(c, 10) {
                                             break 'digitloop;
                                         }
                                     }
                                 }
                             },
-                            'e' | 'E' => {
-                              match self.preview_multiple_next(2).unwrap_or_default().to_digit(10) {
+                            b'e' | b'E' => {
+                              match self.preview_multiple_next(2).map(char::from).unwrap_or_default().to_digit(10) {
                                   Some(0..=9) | None => {
                                     buf.push(self.next());
                                   }
@@ -460,10 +473,10 @@ impl<'a> Lexer<'a> {
                                 }
                             buf.push(self.next());
                             }
-                            '+' | '-' => {
+                            b'+' | b'-' => {
                               break;
                             }
-                            _ if ch.is_digit(10) => {
+                            _ if Self::is_ascii_digit(ch, 10) => {
                                 buf.push(self.next());
                             }
                             _ => break,
@@ -471,40 +484,40 @@ impl<'a> Lexer<'a> {
                     }
                     // TODO make this a bit more safe -------------------------------VVVV
                     self.push_token(TokenKind::NumericLiteral(
-                        f64::from_str(&buf).map_err(|_| LexerError::new("Could not convert value to f64"))?,
+                        f64::from_str(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?).map_err(|_| LexerError::new("Could not convert value to f64"))?,
                     ))
                 }
-                _ if ch.is_alphabetic() || ch == '$' || ch == '_' => {
-                    let mut buf = ch.to_string();
+                _ if ch.is_ascii_alphabetic() || ch == b'$' || ch == b'_' => {
+                    let mut buf = vec![ch];
                     while let Some(ch) = self.preview_next() {
-                        if ch.is_alphabetic() || ch.is_digit(10) || ch == '_' {
+                        if ch.is_ascii_alphabetic() || Self::is_ascii_digit(ch, 10) || ch == b'_' {
                             buf.push(self.next());
                         } else {
                             break;
                         }
                     }
 
-                    self.push_token(match buf.as_str() {
-                        "true" => TokenKind::BooleanLiteral(true),
-                        "false" => TokenKind::BooleanLiteral(false),
-                        "null" => TokenKind::NullLiteral,
+                    self.push_token(match &buf[..] {
+                        b"true" => TokenKind::BooleanLiteral(true),
+                        b"false" => TokenKind::BooleanLiteral(false),
+                        b"null" => TokenKind::NullLiteral,
                         slice => {
-                            if let Ok(keyword) = FromStr::from_str(slice) {
+                            if let Ok(keyword) = str::from_utf8(slice).map_err(|e| LexerError::new(e.to_string()))?.parse() {
                                 TokenKind::Keyword(keyword)
                             } else {
-                                TokenKind::identifier(slice)
+                                TokenKind::Identifier(String::from_utf8(buf).map_err(|e| LexerError::new(e.to_string()))?)
                             }
                         }
                     });
                     // Move position forward the length of keyword
                     self.column_number += (buf.len().wrapping_sub(1)) as u64;
                 }
-                ';' => self.push_punc(Punctuator::Semicolon),
-                ':' => self.push_punc(Punctuator::Colon),
-                '.' => {
+                b';' => self.push_punc(Punctuator::Semicolon),
+                b':' => self.push_punc(Punctuator::Colon),
+                b'.' => {
                     // . or ...
-                    if self.next_is('.') {
-                        if self.next_is('.') {
+                    if self.next_is(b'.') {
+                        if self.next_is(b'.') {
                             self.push_punc(Punctuator::Spread);
                             self.column_number += 2;
                         } else {
@@ -514,22 +527,22 @@ impl<'a> Lexer<'a> {
                         self.push_punc(Punctuator::Dot);
                     };
                 }
-                '(' => self.push_punc(Punctuator::OpenParen),
-                ')' => self.push_punc(Punctuator::CloseParen),
-                ',' => self.push_punc(Punctuator::Comma),
-                '{' => self.push_punc(Punctuator::OpenBlock),
-                '}' => self.push_punc(Punctuator::CloseBlock),
-                '[' => self.push_punc(Punctuator::OpenBracket),
-                ']' => self.push_punc(Punctuator::CloseBracket),
-                '?' => self.push_punc(Punctuator::Question),
+                b'(' => self.push_punc(Punctuator::OpenParen),
+                b')' => self.push_punc(Punctuator::CloseParen),
+                b',' => self.push_punc(Punctuator::Comma),
+                b'{' => self.push_punc(Punctuator::OpenBlock),
+                b'}' => self.push_punc(Punctuator::CloseBlock),
+                b'[' => self.push_punc(Punctuator::OpenBracket),
+                b']' => self.push_punc(Punctuator::CloseBracket),
+                b'?' => self.push_punc(Punctuator::Question),
                 // Comments
-                '/' => {
+                b'/' => {
                     if let Some(ch) = self.preview_next() {
                         match ch {
                             // line comment
-                            '/' => {
+                            b'/' => {
                                 while self.preview_next().is_some() {
-                                    if self.next() == '\n' {
+                                    if self.next() == b'\n' {
                                         break;
                                     }
                                 }
@@ -537,20 +550,20 @@ impl<'a> Lexer<'a> {
                                 self.column_number = 0;
                             }
                             // block comment
-                            '*' => {
+                            b'*' => {
                                 let mut lines = 0;
                                 loop {
                                     if self.preview_next().is_none() {
                                         return Err(LexerError::new("Unterminated Multiline Comment"));
                                     }
                                     match self.next() {
-                                        '*' => {
-                                            if self.next_is('/') {
+                                        b'*' => {
+                                            if self.next_is(b'/') {
                                                 break;
                                             }
                                         }
                                         next_ch => {
-                                            if next_ch == '\n' {
+                                            if next_ch == b'\n' {
                                                 lines += 1;
                                             }
                                         },
@@ -565,21 +578,21 @@ impl<'a> Lexer<'a> {
                                 // buffer to restore later on
                                 let original_buffer = self.buffer.clone();
                                 // first, try to parse a regex literal
-                                let mut body = String::new();
+                                let mut body = Vec::new();
                                 let mut regex = false;
                                 loop {
                                     self.column_number +=1;
                                     match self.buffer.next() {
                                         // end of body
-                                        Some('/') => {
+                                        Some(b'/') => {
                                             regex = true;
                                             break;
                                         }
                                         // newline/eof not allowed in regex literal
-                                        n @ Some('\n') | n @ Some('\r') | n @ Some('\u{2028}')
+                                        n @ Some(b'\n') | n @ Some(b'\r') | n @ Some('\u{2028}')
                                         | n @ Some('\u{2029}') => {
                                             self.column_number = 0;
-                                            if n != Some('\r') {
+                                            if n != Some(b'\r') {
                                                 self.line_number += 1;
                                             }
                                             break
@@ -589,14 +602,14 @@ impl<'a> Lexer<'a> {
                                             break
                                         }
                                         // escape sequence
-                                        Some('\\') => {
-                                            body.push('\\');
+                                        Some(b'\\') => {
+                                            body.push(b'\\');
                                             if self.preview_next().is_none() {
                                                 break;
                                             }
                                             match self.next() {
                                                 // newline not allowed in regex literal
-                                                '\n' | '\r' | '\u{2028}' | '\u{2029}' => break,
+                                                b'\n' | b'\r' | '\u{2028}' | '\u{2029}' => break,
                                                 ch => body.push(ch),
                                             }
                                         }
@@ -605,15 +618,15 @@ impl<'a> Lexer<'a> {
                                 }
                                 if regex {
                                     // body was parsed, now look for flags
-                                    let flags = self.take_char_while(char::is_alphabetic)?;
+                                    let flags = self.take_byte_while(u8::is_ascii_alphabetic)?;
                                     self.push_token(TokenKind::RegularExpressionLiteral(
-                                        body, flags,
+                                        String::from_utf8(body).map_err(|e| LexerError::new(e.to_string()))?, flags,
                                     ));
                                 } else {
                                     // failed to parse regex, restore original buffer position and
                                     // parse either div or assigndiv
                                     self.buffer = original_buffer;
-                                    if self.next_is('=') {
+                                    if self.next_is(b'=') {
                                         self.push_token(TokenKind::Punctuator(
                                             Punctuator::AssignDiv,
                                         ));
@@ -627,54 +640,54 @@ impl<'a> Lexer<'a> {
                         return Err(LexerError::new("Expecting Token /,*,= or regex"));
                     }
                 }
-                '*' => op!(self, Punctuator::AssignMul, Punctuator::Mul, {
-                    '*' => vop!(self, Punctuator::AssignPow, Punctuator::Exp)
+                b'*' => op!(self, Punctuator::AssignMul, Punctuator::Mul, {
+                    b'*' => vop!(self, Punctuator::AssignPow, Punctuator::Exp)
                 }),
-                '+' => op!(self, Punctuator::AssignAdd, Punctuator::Add, {
-                    '+' => Punctuator::Inc
+                b'+' => op!(self, Punctuator::AssignAdd, Punctuator::Add, {
+                    b'+' => Punctuator::Inc
                 }),
-                '-' => op!(self, Punctuator::AssignSub, Punctuator::Sub, {
-                    '-' => {
+                b'-' => op!(self, Punctuator::AssignSub, Punctuator::Sub, {
+                    b'-' => {
                         Punctuator::Dec
                     }
                 }),
-                '%' => op!(self, Punctuator::AssignMod, Punctuator::Mod),
-                '|' => op!(self, Punctuator::AssignOr, Punctuator::Or, {
-                    '|' => Punctuator::BoolOr
+                b'%' => op!(self, Punctuator::AssignMod, Punctuator::Mod),
+                b'|' => op!(self, Punctuator::AssignOr, Punctuator::Or, {
+                    b'|' => Punctuator::BoolOr
                 }),
-                '&' => op!(self, Punctuator::AssignAnd, Punctuator::And, {
-                    '&' => Punctuator::BoolAnd
+                b'&' => op!(self, Punctuator::AssignAnd, Punctuator::And, {
+                    b'&' => Punctuator::BoolAnd
                 }),
-                '^' => op!(self, Punctuator::AssignXor, Punctuator::Xor),
-                '=' => op!(self, if self.next_is('=') {
+                b'^' => op!(self, Punctuator::AssignXor, Punctuator::Xor),
+                b'=' => op!(self, if self.next_is(b'=') {
                     Punctuator::StrictEq
                 } else {
                     Punctuator::Eq
                 }, Punctuator::Assign, {
-                    '>' => {
+                    b'>' => {
                         Punctuator::Arrow
                     }
                 }),
-                '<' => op!(self, Punctuator::LessThanOrEq, Punctuator::LessThan, {
-                    '<' => vop!(self, Punctuator::AssignLeftSh, Punctuator::LeftSh)
+                b'<' => op!(self, Punctuator::LessThanOrEq, Punctuator::LessThan, {
+                    b'<' => vop!(self, Punctuator::AssignLeftSh, Punctuator::LeftSh)
                 }),
-                '>' => op!(self, Punctuator::GreaterThanOrEq, Punctuator::GreaterThan, {
-                    '>' => vop!(self, Punctuator::AssignRightSh, Punctuator::RightSh, {
-                        '>' => vop!(self, Punctuator::AssignURightSh, Punctuator::URightSh)
+                b'>' => op!(self, Punctuator::GreaterThanOrEq, Punctuator::GreaterThan, {
+                    b'>' => vop!(self, Punctuator::AssignRightSh, Punctuator::RightSh, {
+                        b'>' => vop!(self, Punctuator::AssignURightSh, Punctuator::URightSh)
                     })
                 }),
-                '!' => op!(
+                b'!' => op!(
                     self,
                     vop!(self, Punctuator::StrictNotEq, Punctuator::NotEq),
                     Punctuator::Not
                 ),
-                '~' => self.push_punc(Punctuator::Neg),
-                '\n' | '\u{2028}' | '\u{2029}' => {
+                b'~' => self.push_punc(Punctuator::Neg),
+                b'\n' | '\u{2028}' | '\u{2029}' => {
                     self.push_token(TokenKind::LineTerminator);
                     self.line_number += 1;
                     self.column_number = 0;
                 }
-                '\r' => {
+                b'\r' => {
                     self.column_number = 0;
                 }
                 // The rust char::is_whitespace function and the ecma standard use different sets
@@ -687,7 +700,7 @@ impl<'a> Lexer<'a> {
                 // Unicode Space_Seperator category (minus \u{0020} and \u{00A0} which are allready stated above)
                 '\u{1680}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => (),
                 _ => {
-                    let details = format!("{}:{}: Unexpected '{}'", self.line_number, self.column_number, ch);
+                    let details = format!("{}:{}: Unexpected '{}'", self.line_number, self.column_number, char::from(ch));
                     return Err(LexerError { details });
                 },
             }
