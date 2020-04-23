@@ -280,24 +280,58 @@ fn check_keywords() {
 
 #[test]
 fn check_variable_definition_tokens() {
-    let s = "let a = 'hello';";
+    let s = "let a = 'hëllö';";
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
+
     assert_eq!(lexer.tokens[0].kind, TokenKind::Keyword(Keyword::Let));
     assert_eq!(lexer.tokens[1].kind, TokenKind::identifier("a"));
     assert_eq!(
         lexer.tokens[2].kind,
         TokenKind::Punctuator(Punctuator::Assign)
     );
-    assert_eq!(lexer.tokens[3].kind, TokenKind::string_literal("hello"));
+    assert_eq!(lexer.tokens[3].kind, TokenKind::string_literal("hëllö"));
+}
+
+#[test]
+// #[ignore]
+fn check_utf8_identifiers() {
+    let s = "let ö_a = 'hëllö';";
+    println!("{:X?}", s.as_bytes());
+
+    let mut lexer = Lexer::new(s);
+    lexer.lex().expect("failed to lex");
+
+    assert_eq!(lexer.tokens[0].kind, TokenKind::Keyword(Keyword::Let));
+    assert_eq!(lexer.tokens[1].kind, TokenKind::identifier("ö_a"));
+    assert_eq!(
+        lexer.tokens[2].kind,
+        TokenKind::Punctuator(Punctuator::Assign)
+    );
+    assert_eq!(lexer.tokens[3].kind, TokenKind::string_literal("hëllo"));
+
+    let s = "let a_ö = 'hëllö';";
+    println!("{:X?}", s.as_bytes());
+
+    let mut lexer = Lexer::new(s);
+    lexer.lex().expect("failed to lex");
+
+    assert_eq!(lexer.tokens[0].kind, TokenKind::Keyword(Keyword::Let));
+    assert_eq!(lexer.tokens[1].kind, TokenKind::identifier("a_ö"));
+    assert_eq!(
+        lexer.tokens[2].kind,
+        TokenKind::Punctuator(Punctuator::Assign)
+    );
+    assert_eq!(lexer.tokens[3].kind, TokenKind::string_literal("hëllo"));
 }
 
 #[test]
 fn check_positions() {
-    let s = "console.log(\"hello world\"); // Test";
+    let s = "console.log(\"hello wörld\"); // Test";
     // ------123456789
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
+
     // The first column is 1 (not zero indexed)
     assert_eq!(lexer.tokens[0].pos.column_number, 1);
     assert_eq!(lexer.tokens[0].pos.line_number, 1);

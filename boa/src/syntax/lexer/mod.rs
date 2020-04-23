@@ -158,7 +158,7 @@ impl<'a> Lexer<'a> {
     /// next fetches the next token and return it, or a LexerError if there are no more.
     fn next(&mut self) -> u8 {
         self.buffer.next().expect(
-            "No more more characters to consume from input stream, \
+            "No more more bytes to consume from input stream, \
              use preview_next() first to check before calling next()",
         )
     }
@@ -208,6 +208,91 @@ impl<'a> Lexer<'a> {
         result
     }
 
+    /// Checks if a character is whitespace as per the ECMAScript specification.
+    ///
+    /// More information: <https://tc39.es/ecma262/#sec-white-space>
+    fn is_whitespace(&mut self, ch: u8) -> Result<bool, LexerError> {
+        // Note that the Rust `char::is_whitespace` function and the ECMAScript standard use different sets
+        // of characters as whitespaces:
+        //   - Rust uses `\p{White_Space}`,
+        //   - ecma standard uses `\{Space_Separator}` + `\u{0009}`, `\u{000B}`, `\u{000C}`, `\u{FEFF}`
+        //
+        // Explicit whitespace: see https://tc39.es/ecma262/#table-32
+        println!("is whitespace ch: {:X}", ch);
+        match ch {
+            0x09 | 0x0B | 0x0C | 0x20 | 0xA0 => Ok(true),
+            _ => match self.utf8_char(ch)? {
+                None => Ok(false),
+                Some('\u{FEFF}')
+                | Some('\u{2000}'..='\u{200A}')
+                | Some('\u{202F}')
+                | Some('\u{205F}')
+                | Some('\u{3000}') => Ok(true),
+                _ => Ok(false),
+            },
+        }
+    }
+
+    /// Checks if a character is a line terminator as per the ECMAScript specification.
+    ///
+    /// More information: <https://tc39.es/ecma262/#sec-line-terminators>
+    fn is_line_terminator(&self, ch: u8) -> Result<bool, LexerError> {
+        match ch {
+            0x0A | 0x0D => Ok(true),
+            _ => match self.utf8_char(ch)? {
+                None => Ok(false),
+                Some('\u{2028}') | Some('\u{2029}') => Ok(true),
+                _ => Ok(false),
+            },
+        }
+    }
+
+    /// Retrieves the character as an UTF-8 character, if it's not ASCII.
+    fn utf8_char(&self, first_byte: u8) -> Result<Option<char>, LexerError> {
+        dbg!(&self.tokens);
+        println!("first byte: {:b} ({0:X})", first_byte);
+        if first_byte < 0x80 {
+            // 0b0xxx_xxxx
+            println!("1 byte");
+            Ok(None)
+        } else {
+            let num_bytes = if first_byte < 0xE0 {
+                // 0b110x_xxxx
+                2
+            } else if first_byte < 0xF0 {
+                // 0b1110_xxxx
+                3
+            } else {
+                // 0b1111_0xxx
+                4
+            };
+            dbg!(num_bytes);
+            println!("iter: {:X?}", &self.buffer);
+
+            let mut bytes = Vec::with_capacity(num_bytes);
+            bytes.push(first_byte);
+
+            for _ in 1..num_bytes {
+                bytes.push(self.buffer.next().ok_or_else(|| {
+                    LexerError::new("unexpected EOF while parsing an UTF-8 character")
+                })?)
+            }
+
+            println!("bytes: {:X?}", &bytes);
+            println!("next: {:X?}", self.buffer.peek());
+
+            let char_str = String::from_utf8(bytes)
+                .map_err(|e| LexerError::new(e.to_string()))
+                .expect("error"); //?;
+
+            dbg!(&char_str);
+            dbg!(char_str.chars().next().expect("character disappeared"));
+            Ok(Some(
+                char_str.chars().next().expect("character disappeared"),
+            ))
+        }
+    }
+
     /// Checks if the given byte is an ASCII digit with a given radix.
     fn is_ascii_digit(byte: u8, radix: u32) -> bool {
         char::from(byte).is_digit(radix)
@@ -224,6 +309,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
+
         u64::from_str_radix(
             str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?,
             radix,
@@ -282,7 +368,9 @@ impl<'a> Lexer<'a> {
                                             let mut nums = String::with_capacity(2);
                                             for _ in 0_u8..2 {
                                                 if self.preview_next().is_none() {
-                                                    return Err(LexerError::new("Unterminated String"));
+                                                    return Err(LexerError::new(
+                                                        "Unterminated String",
+                                                    ));
                                                 }
                                                 nums.push(char::from(self.next()));
                                             }
@@ -316,10 +404,16 @@ impl<'a> Lexer<'a> {
                                                     Ok(v) => v,
                                                     Err(_) => 0,
                                                 };
-                                                let c = from_u32(as_num).ok_or_else(|| LexerError::new("Invalid Unicode escape sequence"))?;
+                                                let c = from_u32(as_num).ok_or_else(|| {
+                                                    LexerError::new(
+                                                        "Invalid Unicode escape sequence",
+                                                    )
+                                                })?;
 
                                                 if self.preview_next().is_none() {
-                                                    return Err(LexerError::new("Unterminated String"));
+                                                    return Err(LexerError::new(
+                                                        "Unterminated String",
+                                                    ));
                                                 }
                                                 self.next(); // '}'
                                                 self.column_number +=
@@ -360,17 +454,26 @@ impl<'a> Lexer<'a> {
                                         }
                                         b'\'' | b'"' | b'\\' => char::from(escape),
                                         ch => {
-                                            let details = format!("{}:{}: Invalid escape `{}`", self.line_number, self.column_number, ch);
+                                            let details = format!(
+                                                "{}:{}: Invalid escape `{}`",
+                                                self.line_number, self.column_number, ch
+                                            );
                                             return Err(LexerError { details });
                                         }
                                     };
                                     buf.push(escaped_ch);
                                 }
                             }
-                            next_ch => buf.push(char::from(next_ch)),
+                            next_ch => {
+                                if let Some(ch) = self.utf8_char(next_ch)? {
+                                    buf.push(ch);
+                                } else {
+                                    buf.push(char::from(next_ch));
+                                }
+                            }
                         }
                     }
-                    let str_length = buf.len() as u64;
+                    let str_length = buf.chars().count() as u64;
                     self.push_token(TokenKind::StringLiteral(buf));
                     // Why +1? Quotation marks are not included,
                     // So technically it would be +2, (for both " ") but we want to be 1 less
@@ -383,15 +486,9 @@ impl<'a> Lexer<'a> {
                             self.push_token(TokenKind::NumericLiteral(0_f64));
                             return Ok(());
                         }
-                        Some(b'x') | Some(b'X') => {
-                            self.read_integer_radix(16)? as f64
-                        }
-                        Some(b'o') | Some(b'O') => {
-                            self.read_integer_radix(8)? as f64
-                        }
-                        Some(b'b') | Some(b'B') => {
-                            self.read_integer_radix(2)? as f64
-                        }
+                        Some(b'x') | Some(b'X') => self.read_integer_radix(16)? as f64,
+                        Some(b'o') | Some(b'O') => self.read_integer_radix(8)? as f64,
+                        Some(b'b') | Some(b'B') => self.read_integer_radix(2)? as f64,
                         Some(ch) if (ch.is_ascii_digit() || ch == b'.') => {
                             let mut buf = Vec::new();
                             // LEGACY OCTAL (ONLY FOR NON-STRICT MODE)
@@ -413,23 +510,31 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             if gone_decimal {
-                                f64::from_str(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?).map_err(|_e| LexerError::new("Could not convert value to f64"))?
+                                f64::from_str(
+                                    str::from_utf8(&buf)
+                                        .map_err(|e| LexerError::new(e.to_string()))?,
+                                )
+                                .map_err(|_e| LexerError::new("Could not convert value to f64"))?
                             } else if buf.is_empty() {
                                 0.0
                             } else {
-                                (u64::from_str_radix(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?, 8).map_err(|_e| LexerError::new("Could not convert value to u64"))?) as f64
+                                (u64::from_str_radix(
+                                    str::from_utf8(&buf)
+                                        .map_err(|e| LexerError::new(e.to_string()))?,
+                                    8,
+                                )
+                                .map_err(|_e| LexerError::new("Could not convert value to u64"))?)
+                                    as f64
                             }
                         }
-                        Some(_) => {
-                            0.0
-                        }
+                        Some(_) => 0.0,
                     };
 
                     self.push_token(TokenKind::NumericLiteral(num));
 
                     //11.8.3
                     if let Err(e) = self.check_after_numeric_literal() {
-                        return Err(e)
+                        return Err(e);
                     };
                 }
                 _ if Self::is_ascii_digit(ch, 10) => {
@@ -446,13 +551,18 @@ impl<'a> Lexer<'a> {
 
                                 match c {
                                     b'e' | b'E' => {
-                                        match self.preview_multiple_next(2).map(char::from).unwrap_or_default().to_digit(10) {
+                                        match self
+                                            .preview_multiple_next(2)
+                                            .map(char::from)
+                                            .unwrap_or_default()
+                                            .to_digit(10)
+                                        {
                                             Some(0..=9) | None => {
                                                 buf.push(self.next());
-                                              }
-                                              _ => {
+                                            }
+                                            _ => {
                                                 break 'digitloop;
-                                              }
+                                            }
                                         }
                                     }
                                     _ => {
@@ -463,18 +573,23 @@ impl<'a> Lexer<'a> {
                                 }
                             },
                             b'e' | b'E' => {
-                              match self.preview_multiple_next(2).map(char::from).unwrap_or_default().to_digit(10) {
-                                  Some(0..=9) | None => {
-                                    buf.push(self.next());
-                                  }
-                                  _ => {
-                                    break;
-                                  }
+                                match self
+                                    .preview_multiple_next(2)
+                                    .map(char::from)
+                                    .unwrap_or_default()
+                                    .to_digit(10)
+                                {
+                                    Some(0..=9) | None => {
+                                        buf.push(self.next());
+                                    }
+                                    _ => {
+                                        break;
+                                    }
                                 }
-                            buf.push(self.next());
+                                buf.push(self.next());
                             }
                             b'+' | b'-' => {
-                              break;
+                                break;
                             }
                             _ if Self::is_ascii_digit(ch, 10) => {
                                 buf.push(self.next());
@@ -484,33 +599,46 @@ impl<'a> Lexer<'a> {
                     }
                     // TODO make this a bit more safe -------------------------------VVVV
                     self.push_token(TokenKind::NumericLiteral(
-                        f64::from_str(str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?).map_err(|_| LexerError::new("Could not convert value to f64"))?,
+                        f64::from_str(
+                            str::from_utf8(&buf).map_err(|e| LexerError::new(e.to_string()))?,
+                        )
+                        .map_err(|_| LexerError::new("Could not convert value to f64"))?,
                     ))
                 }
                 _ if ch.is_ascii_alphabetic() || ch == b'$' || ch == b'_' => {
                     let mut buf = vec![ch];
                     while let Some(ch) = self.preview_next() {
-                        if ch.is_ascii_alphabetic() || Self::is_ascii_digit(ch, 10) || ch == b'_' {
+                        if ch >= 0x80 {
+                            unimplemented!("UTF-8 identifiers");
+                        } else if ch.is_ascii_alphabetic()
+                            || Self::is_ascii_digit(ch, 10)
+                            || ch == b'_'
+                        {
                             buf.push(self.next());
                         } else {
                             break;
                         }
                     }
 
+                    let len = buf.len();
+
                     self.push_token(match &buf[..] {
                         b"true" => TokenKind::BooleanLiteral(true),
                         b"false" => TokenKind::BooleanLiteral(false),
                         b"null" => TokenKind::NullLiteral,
-                        slice => {
-                            if let Ok(keyword) = str::from_utf8(slice).map_err(|e| LexerError::new(e.to_string()))?.parse() {
+                        _ => {
+                            let str_buf = String::from_utf8(buf)
+                                .map_err(|e| LexerError::new(e.to_string()))?;
+                            if let Ok(keyword) = str_buf.parse() {
+                                // TODO: optimize Keyword to be able to be created from a u8 slice.
                                 TokenKind::Keyword(keyword)
                             } else {
-                                TokenKind::Identifier(String::from_utf8(buf).map_err(|e| LexerError::new(e.to_string()))?)
+                                TokenKind::Identifier(str_buf)
                             }
                         }
                     });
                     // Move position forward the length of keyword
-                    self.column_number += (buf.len().wrapping_sub(1)) as u64;
+                    self.column_number += (len.wrapping_sub(1)) as u64;
                 }
                 b';' => self.push_punc(Punctuator::Semicolon),
                 b':' => self.push_punc(Punctuator::Colon),
@@ -554,7 +682,9 @@ impl<'a> Lexer<'a> {
                                 let mut lines = 0;
                                 loop {
                                     if self.preview_next().is_none() {
-                                        return Err(LexerError::new("Unterminated Multiline Comment"));
+                                        return Err(LexerError::new(
+                                            "Unterminated Multiline Comment",
+                                        ));
                                     }
                                     match self.next() {
                                         b'*' => {
@@ -566,7 +696,7 @@ impl<'a> Lexer<'a> {
                                             if next_ch == b'\n' {
                                                 lines += 1;
                                             }
-                                        },
+                                        }
                                     }
                                 }
                                 self.line_number += lines;
@@ -581,7 +711,7 @@ impl<'a> Lexer<'a> {
                                 let mut body = Vec::new();
                                 let mut regex = false;
                                 loop {
-                                    self.column_number +=1;
+                                    self.column_number += 1;
                                     match self.buffer.next() {
                                         // end of body
                                         Some(b'/') => {
@@ -589,17 +719,16 @@ impl<'a> Lexer<'a> {
                                             break;
                                         }
                                         // newline/eof not allowed in regex literal
-                                        n @ Some(b'\n') | n @ Some(b'\r') | n @ Some('\u{2028}')
-                                        | n @ Some('\u{2029}') => {
+                                        Some(n) if self.is_line_terminator(n)? => {
                                             self.column_number = 0;
-                                            if n != Some(b'\r') {
+                                            if n != b'\r' {
                                                 self.line_number += 1;
                                             }
-                                            break
-                                        },
+                                            break;
+                                        }
                                         None => {
                                             self.column_number -= 1;
-                                            break
+                                            break;
                                         }
                                         // escape sequence
                                         Some(b'\\') => {
@@ -609,7 +738,7 @@ impl<'a> Lexer<'a> {
                                             }
                                             match self.next() {
                                                 // newline not allowed in regex literal
-                                                b'\n' | b'\r' | '\u{2028}' | '\u{2029}' => break,
+                                                ch if self.is_line_terminator(ch)? => break,
                                                 ch => body.push(ch),
                                             }
                                         }
@@ -620,7 +749,9 @@ impl<'a> Lexer<'a> {
                                     // body was parsed, now look for flags
                                     let flags = self.take_byte_while(u8::is_ascii_alphabetic)?;
                                     self.push_token(TokenKind::RegularExpressionLiteral(
-                                        String::from_utf8(body).map_err(|e| LexerError::new(e.to_string()))?, flags,
+                                        String::from_utf8(body)
+                                            .map_err(|e| LexerError::new(e.to_string()))?,
+                                        flags,
                                     ));
                                 } else {
                                     // failed to parse regex, restore original buffer position and
@@ -682,27 +813,24 @@ impl<'a> Lexer<'a> {
                     Punctuator::Not
                 ),
                 b'~' => self.push_punc(Punctuator::Neg),
-                b'\n' | '\u{2028}' | '\u{2029}' => {
+                b'\r' => {
+                    self.column_number = 0;
+                }
+                ch if self.is_line_terminator(ch)? => {
                     self.push_token(TokenKind::LineTerminator);
                     self.line_number += 1;
                     self.column_number = 0;
                 }
-                b'\r' => {
-                    self.column_number = 0;
-                }
-                // The rust char::is_whitespace function and the ecma standard use different sets
-                // of characters as whitespaces:
-                //  * Rust uses \p{White_Space},
-                //  * ecma standard uses \{Space_Separator} + \u{0009}, \u{000B}, \u{000C}, \u{FEFF}
-                //
-                // Explicit whitespace: see https://tc39.es/ecma262/#table-32
-                '\u{0020}' | '\u{0009}' | '\u{000B}' | '\u{000C}' | '\u{00A0}' | '\u{FEFF}' |
-                // Unicode Space_Seperator category (minus \u{0020} and \u{00A0} which are allready stated above)
-                '\u{1680}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => (),
+                _ if self.is_whitespace(ch)? => (),
                 _ => {
-                    let details = format!("{}:{}: Unexpected '{}'", self.line_number, self.column_number, char::from(ch));
+                    let details = format!(
+                        "{}:{}: Unexpected '{}'",
+                        self.line_number,
+                        self.column_number,
+                        char::from(ch)
+                    );
                     return Err(LexerError { details });
-                },
+                }
             }
         }
     }
