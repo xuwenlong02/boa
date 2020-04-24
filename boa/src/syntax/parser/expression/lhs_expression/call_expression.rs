@@ -1,10 +1,13 @@
 use super::arguments::Arguments;
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::Expression, AllowAwait, AllowYield, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Expression, AllowAwait, AllowYield, Cursor, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a call expression.
@@ -38,20 +41,22 @@ impl CallExpression {
 impl TokenParser for CallExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut lhs = if cursor
             .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::OpenParen))
             .is_some()
         {
-            let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
+            let args =
+                Arguments::new(self.allow_yield, self.allow_await).parse(cursor, interner)?;
             Node::call(self.first_member_expr, args)
         } else {
             let next_token = cursor
                 .next_skip_lineterminator()
                 .ok_or(ParseError::AbruptEnd)?;
-            return Err(ParseError::Expected(
-                vec![TokenKind::Punctuator(Punctuator::OpenParen)],
-                next_token.clone(),
+            return Err(ParseError::expected(
+                vec![Punctuator::OpenParen.to_string()],
+                next_token.display(interner).to_string(),
+                next_token.pos,
                 "call expression",
             ));
         };
@@ -62,7 +67,8 @@ impl TokenParser for CallExpression {
                     let _ = cursor
                         .next_skip_lineterminator()
                         .ok_or(ParseError::AbruptEnd)?; // We move the cursor.
-                    let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
+                    let args = Arguments::new(self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?;
                     lhs = Node::call(lhs, args);
                 }
                 TokenKind::Punctuator(Punctuator::Dot) => {
@@ -75,15 +81,17 @@ impl TokenParser for CallExpression {
                         .kind
                     {
                         TokenKind::Identifier(name) => {
-                            lhs = Node::get_const_field(lhs, name);
+                            lhs = Node::get_const_field(lhs, *name);
                         }
                         TokenKind::Keyword(kw) => {
-                            lhs = Node::get_const_field(lhs, kw.to_string());
+                            lhs =
+                                Node::get_const_field(lhs, interner.get_or_intern(kw.to_string()));
                         }
                         _ => {
-                            return Err(ParseError::Expected(
-                                vec![TokenKind::identifier("identifier")],
-                                tok.clone(),
+                            return Err(ParseError::expected(
+                                vec![String::from("identifier")],
+                                tok.display(interner).to_string(),
+                                tok.pos,
                                 "call expression",
                             ));
                         }
@@ -93,9 +101,9 @@ impl TokenParser for CallExpression {
                     let _ = cursor
                         .next_skip_lineterminator()
                         .ok_or(ParseError::AbruptEnd)?; // We move the cursor.
-                    let idx =
-                        Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
-                    cursor.expect(Punctuator::CloseBracket, "call expression")?;
+                    let idx = Expression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?;
+                    cursor.expect(Punctuator::CloseBracket, "call expression", interner)?;
                     lhs = Node::get_field(lhs, idx);
                 }
                 _ => break,

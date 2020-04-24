@@ -15,6 +15,7 @@ use crate::{
         environment_record_trait::EnvironmentRecordTrait,
         lexical_environment::{Environment, EnvironmentType},
     },
+    InternerSym,
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
@@ -27,7 +28,7 @@ pub struct ObjectEnvironmentRecord {
 }
 
 impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
-    fn has_binding(&self, name: &str) -> bool {
+    fn has_binding(&self, name: InternerSym) -> bool {
         if self.bindings.has_field(name) {
             if self.with_environment {
                 // TODO: implement unscopables
@@ -38,7 +39,7 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
         }
     }
 
-    fn create_mutable_binding(&mut self, name: String, deletion: bool) {
+    fn create_mutable_binding(&mut self, name: InternerSym, deletion: bool) {
         // TODO: could save time here and not bother generating a new undefined object,
         // only for it to be replace with the real value later. We could just add the name to a Vector instead
         let bindings = &mut self.bindings;
@@ -51,11 +52,11 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
         bindings.set_prop(name, prop);
     }
 
-    fn create_immutable_binding(&mut self, _name: String, _strict: bool) -> bool {
+    fn create_immutable_binding(&mut self, _name: InternerSym, _strict: bool) -> bool {
         true
     }
 
-    fn initialize_binding(&mut self, name: &str, value: Value) {
+    fn initialize_binding(&mut self, name: InternerSym, value: Value) {
         // We should never need to check if a binding has been created,
         // As all calls to create_mutable_binding are followed by initialized binding
         // The below is just a check.
@@ -63,14 +64,14 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
         self.set_mutable_binding(name, value, false)
     }
 
-    fn set_mutable_binding(&mut self, name: &str, value: Value, strict: bool) {
+    fn set_mutable_binding(&mut self, name: InternerSym, value: Value, strict: bool) {
         debug_assert!(value.is_object() || value.is_function());
 
         let bindings = &mut self.bindings;
         bindings.update_prop(name, Some(value), None, None, Some(strict));
     }
 
-    fn get_binding_value(&self, name: &str, strict: bool) -> Value {
+    fn get_binding_value(&self, name: InternerSym, strict: bool) -> Value {
         if self.bindings.has_field(name) {
             self.bindings.get_field_slice(name)
         } else {
@@ -82,7 +83,7 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
         }
     }
 
-    fn delete_binding(&mut self, name: &str) -> bool {
+    fn delete_binding(&mut self, name: InternerSym) -> bool {
         self.bindings.remove_prop(name);
         true
     }

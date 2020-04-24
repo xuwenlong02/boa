@@ -2,11 +2,15 @@
 mod tests;
 
 use super::{array_initializer::ArrayLiteral, object_initializer::ObjectLiteral, Expression};
-use crate::syntax::{
-    ast::{constant::Const, keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        AllowAwait, AllowYield, Cursor, FunctionExpression, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{constant::Const, keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowYield, Cursor, FunctionExpression, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a primary expression.
@@ -40,41 +44,44 @@ impl PrimaryExpression {
 impl TokenParser for PrimaryExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor
             .next_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
 
-        match &tok.kind {
+        match tok.kind {
             TokenKind::Keyword(Keyword::This) => Ok(Node::This),
             // TokenKind::Keyword(Keyword::Arguments) => Ok(Node::new(NodeBase::Arguments, tok.pos)),
-            TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor),
+            TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor, interner),
             TokenKind::Punctuator(Punctuator::OpenParen) => {
-                let expr =
-                    Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
-                cursor.expect(Punctuator::CloseParen, "primary expression")?;
+                let expr = Expression::new(true, self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)?;
+                cursor.expect(Punctuator::CloseParen, "primary expression", interner)?;
                 Ok(expr)
             }
             TokenKind::Punctuator(Punctuator::OpenBracket) => {
-                ArrayLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+                ArrayLiteral::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
-                ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+                ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
-            TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(*boolean)),
+            TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(boolean)),
             // TODO: ADD TokenKind::UndefinedLiteral
-            TokenKind::Identifier(ref i) if i == "undefined" => Ok(Node::Const(Const::Undefined)),
+            TokenKind::Identifier(i) if i == interner.get_or_intern("undefined") => {
+                Ok(Node::Const(Const::Undefined))
+            }
             TokenKind::NullLiteral => Ok(Node::Const(Const::Null)),
             TokenKind::Identifier(ident) => Ok(Node::local(ident)),
             TokenKind::StringLiteral(s) => Ok(Node::const_node(s)),
-            TokenKind::NumericLiteral(num) => Ok(Node::const_node(*num)),
+            TokenKind::NumericLiteral(num) => Ok(Node::const_node(num)),
             TokenKind::RegularExpressionLiteral(body, flags) => Ok(Node::new(Node::call(
-                Node::local("RegExp"),
+                Node::local(interner.get_or_intern("RegExp")),
                 vec![Node::const_node(body), Node::const_node(flags)],
             ))),
-            _ => Err(ParseError::Unexpected(
-                tok.clone(),
-                Some("primary expression"),
+            _ => Err(ParseError::unexpected(
+                tok.display(interner).to_string(),
+                tok.pos,
+                "primary expression",
             )),
         }
     }

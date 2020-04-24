@@ -1,9 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// For statement parsing
@@ -37,11 +40,11 @@ impl ContinueStatement {
 impl TokenParser for ContinueStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Continue, "continue statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Continue, "continue statement", interner)?;
 
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        match &tok.kind {
+        match tok.kind {
             TokenKind::LineTerminator
             | TokenKind::Punctuator(Punctuator::Semicolon)
             | TokenKind::Punctuator(Punctuator::CloseBlock) => {
@@ -49,13 +52,14 @@ impl TokenParser for ContinueStatement {
                 Ok(Node::Continue(None))
             }
             TokenKind::Identifier(name) => Ok(Node::continue_node(name)),
-            _ => Err(ParseError::Expected(
+            _ => Err(ParseError::expected(
                 vec![
-                    TokenKind::Punctuator(Punctuator::Semicolon),
-                    TokenKind::LineTerminator,
-                    TokenKind::Punctuator(Punctuator::CloseBlock),
+                    Punctuator::Semicolon.to_string(),
+                    TokenKind::LineTerminator.display(interner).to_string(),
+                    Punctuator::CloseBlock.to_string(),
                 ],
-                tok.clone(),
+                tok.display(interner).to_string(),
+                tok.pos,
                 "continue statement",
             )),
         }

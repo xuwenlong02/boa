@@ -1,4 +1,7 @@
-use crate::syntax::ast::{keyword::Keyword, pos::Position, punc::Punctuator};
+use crate::{
+    syntax::ast::{keyword::Keyword, pos::Position, punc::Punctuator},
+    Interner, InternerSym,
+};
 use std::fmt::{Debug, Display, Formatter, Result};
 
 #[cfg(feature = "serde-ast")]
@@ -6,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a token.
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token {
     /// The token Data
     pub kind: TokenKind,
@@ -22,36 +25,51 @@ impl Token {
             pos: Position::new(line_number, column_number),
         }
     }
-}
 
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.kind)
-    }
-}
-
-pub struct VecToken(Vec<Token>);
-
-impl Debug for VecToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let mut buffer = String::new();
-        for token in &self.0 {
-            buffer.push_str(&token.to_string());
+    /// Creates an object with the `fmt::Display` implementation for this token.
+    pub fn display<'f>(&'f self, interner: &'f Interner) -> TokenDisplay<'f, 'f> {
+        TokenDisplay {
+            token: &self,
+            interner,
         }
-        write!(f, "{}", buffer)
     }
 }
+
+/// Structure implementing the `fmt::Display` trait for a `Token`.
+#[derive(Debug)]
+struct TokenDisplay<'t, 'i> {
+    token: &'t Token,
+    interner: &'i Interner,
+}
+
+impl Display for TokenDisplay<'_, '_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.token.kind.display(self.interner))
+    }
+}
+
+// pub struct VecToken(Vec<Token>);
+
+// impl Debug for VecToken {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+//         let mut buffer = String::new();
+//         for token in &self.0 {
+//             buffer.push_str(&token.to_string());
+//         }
+//         write!(f, "{}", buffer)
+//     }
+// }
 
 /// Represents the type of Token and the data it has inside.
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenKind {
     /// A boolean literal, which is either `true` or `false`
     BooleanLiteral(bool),
     /// The end of the file
     EOF,
     /// An identifier
-    Identifier(String),
+    Identifier(InternerSym),
     /// A keyword
     Keyword(Keyword),
     /// A `null` literal
@@ -61,11 +79,21 @@ pub enum TokenKind {
     /// A piece of punctuation
     Punctuator(Punctuator),
     /// A string literal
-    StringLiteral(String),
+    StringLiteral(InternerSym),
     /// A regular expression, consisting of body and flags
-    RegularExpressionLiteral(String, String),
+    RegularExpressionLiteral(InternerSym, InternerSym),
     /// Indicates the end of a line \n
     LineTerminator,
+}
+
+impl TokenKind {
+    /// Creates an object with the `fmt::Display` implementation for this token kind.
+    pub fn display<'f>(self, interner: &'f Interner) -> TokenKindDisplay<'f> {
+        TokenKindDisplay {
+            kind: self,
+            interner,
+        }
+    }
 }
 
 impl From<bool> for TokenKind {
@@ -86,76 +114,47 @@ impl From<Punctuator> for TokenKind {
     }
 }
 
-impl TokenKind {
-    /// Creates a `BooleanLiteral` token kind.
-    pub fn boolean_literal(lit: bool) -> Self {
-        Self::BooleanLiteral(lit)
-    }
-
-    /// Creates an `EOF` token kind.
-    pub fn eof() -> Self {
-        Self::EOF
-    }
-
-    /// Creates an `Identifier` token type.
-    pub fn identifier<I>(ident: I) -> Self
-    where
-        I: Into<String>,
-    {
-        Self::Identifier(ident.into())
-    }
-
-    /// Creates a `Keyword` token kind.
-    pub fn keyword(keyword: Keyword) -> Self {
-        Self::Keyword(keyword)
-    }
-
-    /// Creates a `NumericLiteral` token kind.
-    pub fn numeric_literal(lit: f64) -> Self {
-        Self::NumericLiteral(lit)
-    }
-
-    /// Creates a `Punctuator` token type.
-    pub fn punctuator(punc: Punctuator) -> Self {
-        Self::Punctuator(punc)
-    }
-
-    /// Creates a `StringLiteral` token type.
-    pub fn string_literal<S>(lit: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self::StringLiteral(lit.into())
-    }
-
-    /// Creates a `RegularExpressionLiteral` token kind.
-    pub fn regular_expression_literal<B, F>(body: B, flags: F) -> Self
-    where
-        B: Into<String>,
-        F: Into<String>,
-    {
-        Self::RegularExpressionLiteral(body.into(), flags.into())
-    }
-
-    /// Creates a `LineTerminator` token kind.
-    pub fn line_terminator() -> Self {
-        Self::LineTerminator
-    }
+/// Structure implementing the `fmt::Display` trait for a `TokenKind`.
+#[derive(Debug)]
+pub struct TokenKindDisplay<'i> {
+    kind: TokenKind,
+    interner: &'i Interner,
 }
 
-impl Display for TokenKind {
+impl Display for TokenKindDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match *self {
-            Self::BooleanLiteral(ref val) => write!(f, "{}", val),
-            Self::EOF => write!(f, "end of file"),
-            Self::Identifier(ref ident) => write!(f, "{}", ident),
-            Self::Keyword(ref word) => write!(f, "{}", word),
-            Self::NullLiteral => write!(f, "null"),
-            Self::NumericLiteral(ref num) => write!(f, "{}", num),
-            Self::Punctuator(ref punc) => write!(f, "{}", punc),
-            Self::StringLiteral(ref lit) => write!(f, "{}", lit),
-            Self::RegularExpressionLiteral(ref body, ref flags) => write!(f, "/{}/{}", body, flags),
-            Self::LineTerminator => write!(f, "line terminator"),
+        match self.kind {
+            TokenKind::BooleanLiteral(ref val) => write!(f, "{}", val),
+            TokenKind::EOF => write!(f, "end of file"),
+            TokenKind::Identifier(ident) => write!(
+                f,
+                "{}",
+                self.interner
+                    .resolve(ident)
+                    .expect("identifier string not found")
+            ),
+            TokenKind::Keyword(ref word) => write!(f, "{}", word),
+            TokenKind::NullLiteral => write!(f, "null"),
+            TokenKind::NumericLiteral(ref num) => write!(f, "{}", num),
+            TokenKind::Punctuator(ref punc) => write!(f, "{}", punc),
+            TokenKind::StringLiteral(lit) => write!(
+                f,
+                "{}",
+                self.interner
+                    .resolve(lit)
+                    .expect("could not find string literal string")
+            ),
+            TokenKind::RegularExpressionLiteral(body, flags) => write!(
+                f,
+                "/{}/{}",
+                self.interner
+                    .resolve(body)
+                    .expect("could not find regular expression body string"),
+                self.interner
+                    .resolve(flags)
+                    .expect("could not find regular expression flags string")
+            ),
+            TokenKind::LineTerminator => write!(f, "line terminator"),
         }
     }
 }

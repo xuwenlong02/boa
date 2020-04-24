@@ -19,8 +19,12 @@ fn check_multi_line_comment() {
     let s = "var /* await \n break \n*/ x";
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
+
     assert_eq!(lexer.tokens[0].kind, TokenKind::Keyword(Keyword::Var));
-    assert_eq!(lexer.tokens[1].kind, TokenKind::identifier("x"));
+    assert_eq!(
+        lexer.tokens[1].kind,
+        TokenKind::Identifier(lexer.interner.get("x").unwrap())
+    );
 }
 
 #[test]
@@ -28,9 +32,15 @@ fn check_string() {
     let s = "'aaa' \"bbb\"";
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
-    assert_eq!(lexer.tokens[0].kind, TokenKind::string_literal("aaa"));
 
-    assert_eq!(lexer.tokens[1].kind, TokenKind::string_literal("bbb"));
+    assert_eq!(
+        lexer.tokens[0].kind,
+        TokenKind::StringLiteral(lexer.interner.get("aaa").unwrap())
+    );
+    assert_eq!(
+        lexer.tokens[1].kind,
+        TokenKind::StringLiteral(lexer.interner.get("bbb").unwrap())
+    );
 }
 
 #[test]
@@ -41,6 +51,7 @@ fn check_punctuators() {
              = += -= *= &= **= ++ ** <<= >>= >>>= &= |= ^= =>";
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
+
     assert_eq!(
         lexer.tokens[0].kind,
         TokenKind::Punctuator(Punctuator::OpenBlock)
@@ -283,13 +294,20 @@ fn check_variable_definition_tokens() {
     let s = "let a = 'hello';";
     let mut lexer = Lexer::new(s);
     lexer.lex().expect("failed to lex");
+
     assert_eq!(lexer.tokens[0].kind, TokenKind::Keyword(Keyword::Let));
-    assert_eq!(lexer.tokens[1].kind, TokenKind::identifier("a"));
+    assert_eq!(
+        lexer.tokens[1].kind,
+        TokenKind::Identifier(lexer.interner.get("a").unwrap())
+    );
     assert_eq!(
         lexer.tokens[2].kind,
         TokenKind::Punctuator(Punctuator::Assign)
     );
-    assert_eq!(lexer.tokens[3].kind, TokenKind::string_literal("hello"));
+    assert_eq!(
+        lexer.tokens[3].kind,
+        TokenKind::StringLiteral(lexer.interner.get("hello").unwrap())
+    );
 }
 
 #[test]
@@ -416,7 +434,10 @@ fn test_regex_literal() {
     lexer.lex().expect("failed to lex");
     assert_eq!(
         lexer.tokens[0].kind,
-        TokenKind::regular_expression_literal("(?:)", "")
+        TokenKind::RegularExpressionLiteral(
+            lexer.interner.get("(?:)").unwrap(),
+            lexer.interner.get("").unwrap()
+        )
     );
 }
 
@@ -426,7 +447,10 @@ fn test_regex_literal_flags() {
     lexer.lex().expect("failed to lex");
     assert_eq!(
         lexer.tokens[0].kind,
-        TokenKind::regular_expression_literal("\\/[^\\/]*\\/*", "gmi")
+        TokenKind::RegularExpressionLiteral(
+            lexer.interner.get("\\/[^\\/]*\\/*").unwrap(),
+            lexer.interner.get("gmi").unwrap()
+        )
     );
 }
 

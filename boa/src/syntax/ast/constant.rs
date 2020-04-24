@@ -1,14 +1,16 @@
-use gc_derive::{Finalize, Trace};
+use crate::{Interner, InternerSym};
+use gc::{Finalize, Trace};
 use std::fmt::{Display, Formatter, Result};
 
 #[cfg(feature = "serde-ast")]
 use serde::{Deserialize, Serialize};
+
 /// A Javascript Constant.
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, Trace, Finalize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Const {
     /// A UTF-8 string, such as `"Hello, world"`
-    String(String),
+    String(InternerSym),
     // A 64-bit floating-point number, such as `3.1415`
     Num(f64),
     // A 32-bit integer, such as `42`
@@ -21,20 +23,22 @@ pub enum Const {
     Undefined,
 }
 
-impl From<&str> for Const {
-    fn from(s: &str) -> Self {
-        Const::String(s.into())
+impl Finalize for Const {}
+unsafe impl Trace for Const {
+    #[inline]
+    unsafe fn trace(&self) {}
+    #[inline]
+    unsafe fn root(&self) {}
+    #[inline]
+    unsafe fn unroot(&self) {}
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self)
     }
 }
 
-impl From<&String> for Const {
-    fn from(s: &String) -> Self {
-        Const::String(s.clone())
-    }
-}
-
-impl From<String> for Const {
-    fn from(s: String) -> Self {
+impl From<InternerSym> for Const {
+    fn from(s: InternerSym) -> Self {
         Const::String(s)
     }
 }
@@ -57,15 +61,35 @@ impl From<bool> for Const {
     }
 }
 
-impl Display for Const {
+impl Const {
+    /// Generates a structure that implements `fmt::Display` for this structure.
+    pub fn display<'f>(self, interner: &'f Interner) -> ConstDisplay<'f> {
+        ConstDisplay {
+            constant: self,
+            interner,
+        }
+    }
+}
+
+/// structure implementing `fmt::Display` for `Const`.
+struct ConstDisplay<'d> {
+    constant: Const,
+    interner: &'d Interner,
+}
+
+impl Display for ConstDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match *self {
-            Self::String(ref st) => write!(f, "\"{}\"", st),
-            Self::Num(num) => write!(f, "{}", num),
-            Self::Int(num) => write!(f, "{}", num),
-            Self::Bool(v) => write!(f, "{}", v),
-            Self::Null => write!(f, "null"),
-            Self::Undefined => write!(f, "undefined"),
+        match self.constant {
+            Const::String(st) => write!(
+                f,
+                "\"{}\"",
+                self.interner.resolve(st).expect("string disappeared")
+            ),
+            Const::Num(num) => write!(f, "{}", num),
+            Const::Int(num) => write!(f, "{}", num),
+            Const::Bool(v) => write!(f, "{}", v),
+            Const::Null => write!(f, "null"),
+            Const::Undefined => write!(f, "undefined"),
         }
     }
 }

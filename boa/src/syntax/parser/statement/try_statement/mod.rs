@@ -2,9 +2,14 @@
 mod tests;
 
 use super::block::Block;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
+    },
+    Interner,
 };
 
 /// Try...catch statement parsing
@@ -41,12 +46,12 @@ impl TryStatement {
 impl TokenParser for TryStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TRY
-        cursor.expect(Keyword::Try, "try statement")?;
+        cursor.expect(Keyword::Try, "try statement", interner)?;
 
-        let try_clause =
-            Block::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?;
+        let try_clause = Block::new(self.allow_yield, self.allow_await, self.allow_return)
+            .parse(cursor, interner)?;
 
         let next_token = cursor
             .peek_skip_lineterminator()
@@ -55,12 +60,10 @@ impl TokenParser for TryStatement {
         if next_token.kind != TokenKind::Keyword(Keyword::Catch)
             && next_token.kind != TokenKind::Keyword(Keyword::Finally)
         {
-            return Err(ParseError::Expected(
-                vec![
-                    TokenKind::Keyword(Keyword::Catch),
-                    TokenKind::Keyword(Keyword::Finally),
-                ],
-                next_token.clone(),
+            return Err(ParseError::expected(
+                vec![Keyword::Catch.to_string(), Keyword::Finally.to_string()],
+                next_token.display(interner).to_string(),
+                next_token.pos,
                 "try statement",
             ));
         }
@@ -70,25 +73,26 @@ impl TokenParser for TryStatement {
             cursor.skip(|tk| tk.kind == TokenKind::LineTerminator); // Advance the cursor
 
             // Catch binding
-            cursor.expect(Punctuator::OpenParen, "catch in try statement")?;
+            cursor.expect(Punctuator::OpenParen, "catch in try statement", interner)?;
             // TODO: should accept BindingPattern
             let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
-            let catch_param = if let TokenKind::Identifier(s) = &tok.kind {
+            let catch_param = if let TokenKind::Identifier(s) = tok.kind {
                 Node::local(s)
             } else {
-                return Err(ParseError::Expected(
-                    vec![TokenKind::identifier("identifier")],
-                    tok.clone(),
+                return Err(ParseError::expected(
+                    vec![String::from("identifier")],
+                    tok.display(interner).to_string(),
+                    tok.pos,
                     "catch in try statement",
                 ));
             };
-            cursor.expect(Punctuator::CloseParen, "catch in try statement")?;
+            cursor.expect(Punctuator::CloseParen, "catch in try statement", interner)?;
 
             // Catch block
             (
                 Some(
                     Block::new(self.allow_yield, self.allow_await, self.allow_return)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ),
                 Some(catch_param),
             )
@@ -101,7 +105,10 @@ impl TokenParser for TryStatement {
             .next_if_skip_lineterminator(TokenKind::Keyword(Keyword::Finally))
             .is_some()
         {
-            Some(Block::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?)
+            Some(
+                Block::new(self.allow_yield, self.allow_await, self.allow_return)
+                    .parse(cursor, interner)?,
+            )
         } else {
             None
         };

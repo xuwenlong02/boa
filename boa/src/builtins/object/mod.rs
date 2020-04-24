@@ -5,6 +5,7 @@ use crate::{
         value::{from_value, same_value, to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
+    InternerSym,
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
@@ -28,9 +29,9 @@ pub struct Object {
     /// Kind
     pub kind: ObjectKind,
     /// Internal Slots
-    pub internal_slots: Box<HashMap<String, Value>>,
+    pub internal_slots: Box<HashMap<InternerSym, Value>>,
     /// Properties
-    pub properties: Box<HashMap<String, Property>>,
+    pub properties: Box<HashMap<InternerSym, Property>>,
     /// Symbol Properties
     pub sym_properties: Box<HashMap<i32, Property>>,
     /// Some rust object that stores internal state
@@ -64,22 +65,22 @@ impl ObjectInternalMethods for Object {
         true
     }
 
-    fn insert_property(&mut self, name: String, p: Property) {
+    fn insert_property(&mut self, name: InternerSym, p: Property) {
         self.properties.insert(name, p);
     }
 
-    fn remove_property(&mut self, name: &str) {
-        self.properties.remove(name);
+    fn remove_property(&mut self, name: InternerSym) {
+        self.properties.remove(&name);
     }
 
     /// Utility function to set an internal slot
-    fn set_internal_slot(&mut self, name: &str, val: Value) {
-        self.internal_slots.insert(name.to_string(), val);
+    fn set_internal_slot(&mut self, name: InternerSym, val: Value) {
+        self.internal_slots.insert(name, val);
     }
 
     /// Utility function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: &str) -> Value {
-        match self.internal_slots.get(name) {
+    fn get_internal_slot(&self, name: InternerSym) -> Value {
+        match self.internal_slots.get(&name) {
             Some(v) => v.clone(),
             None => Gc::new(ValueData::Null),
         }
@@ -143,9 +144,9 @@ impl ObjectInternalMethods for Object {
         }
     }
 
-    #[allow(clippy::option_unwrap_used)]
-    fn define_own_property(&mut self, property_key: String, desc: Property) -> bool {
-        let mut current = self.get_own_property(&to_value(property_key.to_string()));
+    // #[allow(clippy::option_unwrap_used)]
+    fn define_own_property(&mut self, property_key: InternerSym, desc: Property) -> bool {
+        let mut current = self.get_own_property(&to_value(property_key));
         let extensible = self.is_extensible();
 
         // https://tc39.es/ecma262/#sec-validateandapplypropertydescriptor
@@ -216,7 +217,7 @@ impl ObjectInternalMethods for Object {
                     .expect("parsing failed");
                 self.sym_properties.insert(sym_id, current);
             } else {
-                self.properties.insert(property_key.clone(), current);
+                self.properties.insert(property_key, current);
             }
         // 7
         } else if current.is_data_descriptor() && desc.is_data_descriptor() {

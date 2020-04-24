@@ -1,9 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, Expression, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, Expression, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Return statement parsing
@@ -37,8 +40,8 @@ impl ReturnStatement {
 impl TokenParser for ReturnStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Return, "return statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Return, "return statement", interner)?;
 
         if let Some(tok) = cursor.peek(0) {
             match tok.kind {
@@ -53,9 +56,10 @@ impl TokenParser for ReturnStatement {
             }
         }
 
-        let expr = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let expr =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect_semicolon(false, "return statement")?;
+        cursor.expect_semicolon(false, "return statement", interner)?;
 
         Ok(Node::return_node(expr))
     }

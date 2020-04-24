@@ -7,12 +7,15 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Glossary/Argument
 //! [spec]: https://tc39.es/ecma262/#prod-Arguments
 
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::assignment_operator::AssignmentExpression, AllowAwait, AllowYield, Cursor,
-        ParseError, TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::assignment_operator::AssignmentExpression, AllowAwait, AllowYield, Cursor,
+            ParseError, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a list of arguments.
@@ -46,7 +49,11 @@ impl Arguments {
 impl TokenParser for Arguments {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Vec<Node>, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Vec<Node>, ParseError> {
         let mut args = Vec::new();
         loop {
             let next_token = cursor
@@ -56,7 +63,11 @@ impl TokenParser for Arguments {
                 TokenKind::Punctuator(Punctuator::CloseParen) => break,
                 TokenKind::Punctuator(Punctuator::Comma) => {
                     if args.is_empty() {
-                        return Err(ParseError::Unexpected(next_token.clone(), None));
+                        return Err(ParseError::unexpected(
+                            next_token.display(interner).to_string(),
+                            next_token.pos,
+                            None,
+                        ));
                     }
 
                     if cursor
@@ -68,12 +79,13 @@ impl TokenParser for Arguments {
                 }
                 _ => {
                     if !args.is_empty() {
-                        return Err(ParseError::Expected(
+                        return Err(ParseError::expected(
                             vec![
-                                TokenKind::Punctuator(Punctuator::Comma),
-                                TokenKind::Punctuator(Punctuator::CloseParen),
+                                Punctuator::Comma.to_string(),
+                                Punctuator::CloseParen.to_string(),
                             ],
-                            next_token.clone(),
+                            next_token.display(interner).to_string(),
+                            next_token.pos,
                             "argument list",
                         ));
                     } else {
@@ -88,12 +100,12 @@ impl TokenParser for Arguments {
             {
                 args.push(Node::spread(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             } else {
                 args.push(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 );
             }
         }

@@ -6,12 +6,15 @@
 //! [spec]: https://tc39.es/ecma262/#prod-MemberExpression
 
 use super::arguments::Arguments;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::{primary_expression::PrimaryExpression, Expression},
-        AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::{primary_expression::PrimaryExpression, Expression},
+            AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a member expression.
@@ -43,7 +46,7 @@ impl MemberExpression {
 impl TokenParser for MemberExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut lhs = if cursor
             .peek_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?
@@ -53,14 +56,15 @@ impl TokenParser for MemberExpression {
             let _ = cursor
                 .next_skip_lineterminator()
                 .expect("keyword disappeared");
-            let lhs = self.parse(cursor)?;
-            cursor.expect(Punctuator::OpenParen, "member expression")?;
-            let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
+            let lhs = self.parse(cursor, interner)?;
+            cursor.expect(Punctuator::OpenParen, "member expression", interner)?;
+            let args =
+                Arguments::new(self.allow_yield, self.allow_await).parse(cursor, interner)?;
             let call_node = Node::call(lhs, args);
 
             Node::new(call_node)
         } else {
-            PrimaryExpression::new(self.allow_yield, self.allow_await).parse(cursor)?
+            PrimaryExpression::new(self.allow_yield, self.allow_await).parse(cursor, interner)?
         };
         while let Some(tok) = cursor.peek_skip_lineterminator() {
             match &tok.kind {
@@ -73,12 +77,15 @@ impl TokenParser for MemberExpression {
                         .ok_or(ParseError::AbruptEnd)?
                         .kind
                     {
-                        TokenKind::Identifier(name) => lhs = Node::get_const_field(lhs, name),
-                        TokenKind::Keyword(kw) => lhs = Node::get_const_field(lhs, kw.to_string()),
+                        TokenKind::Identifier(name) => lhs = Node::get_const_field(lhs, *name),
+                        TokenKind::Keyword(kw) => {
+                            lhs = Node::get_const_field(lhs, interner.get_or_intern(kw.to_string()))
+                        }
                         _ => {
-                            return Err(ParseError::Expected(
-                                vec![TokenKind::identifier("identifier")],
-                                tok.clone(),
+                            return Err(ParseError::expected(
+                                vec![String::from("identifier")],
+                                tok.display(interner).to_string(),
+                                tok.pos,
                                 "member expression",
                             ));
                         }
@@ -88,9 +95,9 @@ impl TokenParser for MemberExpression {
                     let _ = cursor
                         .next_skip_lineterminator()
                         .ok_or(ParseError::AbruptEnd)?; // We move the cursor forward.
-                    let idx =
-                        Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
-                    cursor.expect(Punctuator::CloseBracket, "member expression")?;
+                    let idx = Expression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?;
+                    cursor.expect(Punctuator::CloseBracket, "member expression", interner)?;
                     lhs = Node::get_field(lhs, idx);
                 }
                 _ => break,

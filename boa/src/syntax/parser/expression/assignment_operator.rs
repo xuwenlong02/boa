@@ -8,12 +8,15 @@
 //! [spec]: https://tc39.es/ecma262/#sec-assignment-operators
 
 use super::conditional_operator::ConditionalExpression;
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        AllowAwait, AllowIn, AllowYield, ArrowFunction, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowIn, AllowYield, ArrowFunction, Cursor, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Assignment expression parsing.
@@ -64,7 +67,7 @@ impl AssignmentExpression {
 impl TokenParser for AssignmentExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // Arrow function
         let next_token = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
         match next_token.kind {
@@ -77,7 +80,7 @@ impl TokenParser for AssignmentExpression {
                             self.allow_yield,
                             self.allow_await,
                         )
-                        .parse(cursor);
+                        .parse(cursor, interner);
                     }
                 }
             }
@@ -85,7 +88,7 @@ impl TokenParser for AssignmentExpression {
             TokenKind::Punctuator(Punctuator::OpenParen) => {
                 if let Some(node) =
                     ArrowFunction::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .try_parse(cursor)
+                        .try_parse(cursor, interner)
                 {
                     return Ok(node);
                 }
@@ -94,16 +97,16 @@ impl TokenParser for AssignmentExpression {
         }
 
         let mut lhs = ConditionalExpression::new(self.allow_in, self.allow_yield, self.allow_await)
-            .parse(cursor)?;
+            .parse(cursor, interner)?;
         // let mut lhs = self.read_block()?;
 
         if let Some(tok) = cursor.next() {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Assign) => {
-                    lhs = Node::assign(lhs, self.parse(cursor)?)
+                    lhs = Node::assign(lhs, self.parse(cursor, interner)?)
                 }
                 TokenKind::Punctuator(p) if p.as_binop().is_some() => {
-                    let expr = self.parse(cursor)?;
+                    let expr = self.parse(cursor, interner)?;
                     let binop = p.as_binop().expect("binop disappeared");
                     lhs = Node::bin_op(binop, lhs, expr);
                 }

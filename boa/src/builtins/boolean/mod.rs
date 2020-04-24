@@ -8,6 +8,7 @@ use crate::{
         value::{to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
+    Interner,
 };
 use std::{borrow::Borrow, ops::Deref};
 
@@ -68,15 +69,8 @@ pub fn create_constructor(global: &Value) -> Value {
 // === Utility Functions ===
 /// [toBoolean](https://tc39.es/ecma262/#sec-toboolean)
 /// Creates a new boolean value from the input
-pub fn to_boolean(value: &Value) -> Value {
-    match *value.deref().borrow() {
-        ValueData::Object(_) => to_value(true),
-        ValueData::String(ref s) if !s.is_empty() => to_value(true),
-        ValueData::Number(n) if n != 0.0 && !n.is_nan() => to_value(true),
-        ValueData::Integer(n) if n != 0 => to_value(true),
-        ValueData::Boolean(v) => to_value(v),
-        _ => to_value(false),
-    }
+pub fn to_boolean(value: &Value, interner: &Interner) -> Value {
+    to_value(value.deref().borrow().is_true(interner))
 }
 
 pub fn this_boolean_value(value: &Value) -> Value {

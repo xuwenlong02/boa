@@ -15,13 +15,16 @@ mod tests;
 pub(in crate::syntax::parser) use self::{
     function_declaration::FunctionDeclaration, function_expression::FunctionExpression,
 };
-use crate::syntax::{
-    ast::{
-        node::{self, Node},
-        punc::Punctuator,
-        token::TokenKind,
+use crate::{
+    syntax::{
+        ast::{
+            node::{self, Node},
+            punc::Punctuator,
+            token::TokenKind,
+        },
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, StatementList, TokenParser},
     },
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, StatementList, TokenParser},
+    Interner,
 };
 
 /// Formal parameters parsing.
@@ -55,7 +58,11 @@ impl FormalParameters {
 impl TokenParser for FormalParameters {
     type Output = Vec<node::FormalParameter>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let mut params = Vec::new();
 
         if cursor
@@ -74,9 +81,11 @@ impl TokenParser for FormalParameters {
                     .is_some()
                 {
                     rest_param = true;
-                    FunctionRestParameter::new(self.allow_yield, self.allow_await).parse(cursor)?
+                    FunctionRestParameter::new(self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?
                 } else {
-                    FormalParameter::new(self.allow_yield, self.allow_await).parse(cursor)?
+                    FormalParameter::new(self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?
                 },
             );
             if cursor
@@ -87,16 +96,15 @@ impl TokenParser for FormalParameters {
             }
 
             if rest_param {
-                return Err(ParseError::Unexpected(
-                    cursor
-                        .peek_prev()
-                        .expect("current token disappeared")
-                        .clone(),
-                    Some("rest parameter must be the last formal parameter"),
+                let prev_token = cursor.peek_prev().expect("current token disappeared");
+                return Err(ParseError::unexpected(
+                    prev_token.display(interner).to_string(),
+                    prev_token.pos,
+                    "rest parameter must be the last formal parameter",
                 ));
             }
 
-            cursor.expect(Punctuator::Comma, "parameter list")?;
+            cursor.expect(Punctuator::Comma, "parameter list", interner)?;
         }
 
         Ok(params)
@@ -134,15 +142,20 @@ impl FunctionRestParameter {
 impl TokenParser for FunctionRestParameter {
     type Output = node::FormalParameter;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
         Ok(Self::Output::new(
-            if let TokenKind::Identifier(name) = &token.kind {
+            if let TokenKind::Identifier(name) = token.kind {
                 name
             } else {
-                return Err(ParseError::Expected(
-                    vec![TokenKind::identifier("identifier")],
-                    token.clone(),
+                return Err(ParseError::expected(
+                    vec![String::from("identifier")],
+                    token.display(interner).to_string(),
+                    token.pos,
                     "rest parameter",
                 ));
             },
@@ -183,16 +196,21 @@ impl FormalParameter {
 impl TokenParser for FormalParameter {
     type Output = node::FormalParameter;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let token = cursor
             .next_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
-        let name = if let TokenKind::Identifier(name) = &token.kind {
+        let name = if let TokenKind::Identifier(name) = token.kind {
             name
         } else {
-            return Err(ParseError::Expected(
-                vec![TokenKind::identifier("identifier")],
-                token.clone(),
+            return Err(ParseError::expected(
+                vec![String::from("identifier")],
+                token.display(interner).to_string(),
+                token.pos,
                 "formal parameter",
             ));
         };
@@ -239,13 +257,17 @@ impl FunctionStatementList {
 impl TokenParser for FunctionStatementList {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         if let Some(tk) = cursor.peek_skip_lineterminator() {
             if tk.kind == Punctuator::CloseBlock.into() {
                 return Ok(Vec::new());
             }
         }
 
-        StatementList::new(self.allow_yield, self.allow_await, true, true).parse(cursor)
+        StatementList::new(self.allow_yield, self.allow_await, true, true).parse(cursor, interner)
     }
 }

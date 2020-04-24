@@ -11,16 +11,19 @@
 mod tests;
 
 use super::assignment_operator::AssignmentExpression;
-use crate::syntax::{
-    ast::{
-        node::{self, MethodDefinitionKind, Node},
-        punc::Punctuator,
-        token::TokenKind,
+use crate::{
+    syntax::{
+        ast::{
+            node::{self, MethodDefinitionKind, Node},
+            punc::Punctuator,
+            token::TokenKind,
+        },
+        parser::{
+            AllowAwait, AllowIn, AllowYield, Cursor, FormalParameters, FunctionBody, ParseError,
+            ParseResult, TokenParser,
+        },
     },
-    parser::{
-        AllowAwait, AllowIn, AllowYield, Cursor, FormalParameters, FunctionBody, ParseError,
-        ParseResult, TokenParser,
-    },
+    Interner, InternerSym,
 };
 
 /// Parses an object literal.
@@ -54,7 +57,7 @@ impl ObjectLiteral {
 impl TokenParser for ObjectLiteral {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -65,8 +68,10 @@ impl TokenParser for ObjectLiteral {
                 break;
             }
 
-            elements
-                .push(PropertyDefinition::new(self.allow_yield, self.allow_await).parse(cursor)?);
+            elements.push(
+                PropertyDefinition::new(self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)?,
+            );
 
             if cursor
                 .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::CloseBlock))
@@ -82,12 +87,13 @@ impl TokenParser for ObjectLiteral {
                 let next_token = cursor
                     .next_skip_lineterminator()
                     .ok_or(ParseError::AbruptEnd)?;
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![
-                        TokenKind::Punctuator(Punctuator::Comma),
-                        TokenKind::Punctuator(Punctuator::CloseBlock),
+                        Punctuator::Comma.to_string(),
+                        Punctuator::CloseBlock.to_string(),
                     ],
-                    next_token.clone(),
+                    next_token.display(interner).to_string(),
+                    next_token.pos,
                     "object literal",
                 ));
             }
@@ -128,12 +134,16 @@ impl PropertyDefinition {
 impl TokenParser for PropertyDefinition {
     type Output = node::PropertyDefinition;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
-        fn to_string(kind: &TokenKind) -> String {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
+        fn to_string(kind: TokenKind, interner: &mut Interner) -> InternerSym {
             match kind {
-                TokenKind::Identifier(name) => name.clone(),
-                TokenKind::NumericLiteral(n) => format!("{}", n),
-                TokenKind::StringLiteral(s) => s.clone(),
+                TokenKind::Identifier(name) => name,
+                TokenKind::NumericLiteral(n) => interner.get_or_intern(format!("{}", n)),
+                TokenKind::StringLiteral(s) => s,
                 _ => unimplemented!("{:?}", kind),
             }
         }
@@ -143,13 +153,13 @@ impl TokenParser for PropertyDefinition {
             .is_some()
         {
             let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                .parse(cursor)?;
+                .parse(cursor, interner)?;
             return Ok(node::PropertyDefinition::SpreadObject(node));
         }
 
         let prop_name = cursor
             .next_skip_lineterminator()
-            .map(|tok| to_string(&tok.kind))
+            .map(|tok| to_string(tok.kind, interner))
             .ok_or(ParseError::AbruptEnd)?;
 
         if cursor
@@ -157,7 +167,7 @@ impl TokenParser for PropertyDefinition {
             .is_some()
         {
             let val = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                .parse(cursor)?;
+                .parse(cursor, interner)?;
             return Ok(node::PropertyDefinition::Property(prop_name, val));
         }
 
@@ -166,15 +176,16 @@ impl TokenParser for PropertyDefinition {
             .next_if_skip_lineterminator(TokenKind::Punctuator(Punctuator::OpenParen))
             .is_some()
         {
-            let params = FormalParameters::new(self.allow_yield, self.allow_await).parse(cursor)?;
+            let params = FormalParameters::new(self.allow_yield, self.allow_await)
+                .parse(cursor, interner)?;
 
-            cursor.expect(Punctuator::OpenBlock, "method definition")?;
+            cursor.expect(Punctuator::OpenBlock, "method definition", interner)?;
 
             let body = FunctionBody::new(self.allow_yield, self.allow_await)
-                .parse(cursor)
+                .parse(cursor, interner)
                 .map(Node::StatementList)?;
 
-            cursor.expect(Punctuator::CloseBlock, "method definition")?;
+            cursor.expect(Punctuator::CloseBlock, "method definition", interner)?;
 
             return Ok(node::PropertyDefinition::MethodDefinition(
                 MethodDefinitionKind::Ordinary,
@@ -215,10 +226,7 @@ impl TokenParser for PropertyDefinition {
             .peek(0)
             .map(|tok| tok.pos)
             .ok_or(ParseError::AbruptEnd)?;
-        Err(ParseError::General(
-            "expected property definition",
-            Some(pos),
-        ))
+        Err(ParseError::general("expected property definition", pos))
     }
 }
 
@@ -258,8 +266,9 @@ impl Initializer {
 impl TokenParser for Initializer {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Punctuator::Assign, "initializer")?;
-        AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await).parse(cursor)
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Punctuator::Assign, "initializer", interner)?;
+        AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await)
+            .parse(cursor, interner)
     }
 }

@@ -2,10 +2,10 @@ use crate::builtins::{
     object::{Object, PROTOTYPE},
     property::Property,
     value::{to_value, Value, ValueData},
+    InternerSym,
 };
 use gc::Gc;
-use std::borrow::Borrow;
-use std::ops::Deref;
+use std::{borrow::Borrow, ops::Deref};
 
 /// Here lies the internal methods for ordinary objects.   
 /// Most objects make use of these methods, including exotic objects like functions.   
@@ -154,14 +154,14 @@ pub trait ObjectInternalMethods {
         self.get_internal_slot(PROTOTYPE)
     }
 
-    fn define_own_property(&mut self, property_key: String, desc: Property) -> bool;
+    fn define_own_property(&mut self, property_key: InternerSym, desc: Property) -> bool;
 
     /// Utility function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: &str) -> Value;
+    fn get_internal_slot(&self, name: InternerSym) -> Value;
 
-    fn set_internal_slot(&mut self, name: &str, val: Value);
+    fn set_internal_slot(&mut self, name: InternerSym, val: Value);
 
-    fn insert_property(&mut self, name: String, p: Property);
+    fn insert_property(&mut self, name: InternerSym, p: Property);
 
-    fn remove_property(&mut self, name: &str);
+    fn remove_property(&mut self, name: InternerSym);
 }

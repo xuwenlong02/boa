@@ -1,9 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, Expression, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowYield, Cursor, Expression, ParseError, ParseResult, TokenParser,
+        },
+    },
+    Interner,
 };
 
 /// For statement parsing
@@ -37,21 +42,22 @@ impl ThrowStatement {
 impl TokenParser for ThrowStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Throw, "throw statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Throw, "throw statement", interner)?;
 
         if let Some(tok) = cursor.peek(0) {
             match tok.kind {
                 TokenKind::LineTerminator // no `LineTerminator` here
                 | TokenKind::Punctuator(Punctuator::Semicolon)
                 | TokenKind::Punctuator(Punctuator::CloseBlock) => {
-                    return Err(ParseError::Unexpected(tok.clone(), Some("throw statement")));
+                    return Err(ParseError::unexpected(tok.display(interner).to_string(), tok.pos, "throw statement"));
                 }
                 _ => {}
             }
         }
 
-        let expr = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let expr =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
         if let Some(tok) = cursor.peek(0) {
             if tok.kind == TokenKind::Punctuator(Punctuator::Semicolon) {
                 let _ = cursor.next();

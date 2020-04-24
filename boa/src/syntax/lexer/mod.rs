@@ -6,9 +6,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::ast::{
-    punc::Punctuator,
-    token::{Token, TokenKind},
+use crate::{
+    syntax::ast::{
+        punc::Punctuator,
+        token::{Token, TokenKind},
+    },
+    Interner,
 };
 use std::{
     char::{decode_utf16, from_u32},
@@ -107,14 +110,16 @@ impl error::Error for LexerError {
 /// A lexical analyzer for JavaScript source code
 #[derive(Debug)]
 pub struct Lexer<'a> {
-    // The list fo tokens generated so far
+    /// The list of tokens generated so far.
     pub tokens: Vec<Token>,
-    // The current line number in the script
+    /// The current line number in the script.
     line_number: u64,
-    // the current column number in the script
+    /// the current column number in the script.
     column_number: u64,
-    // The full string
+    /// The full source code string.
     buffer: Peekable<Chars<'a>>,
+    /// String interner.
+    pub interner: Interner,
 }
 
 impl<'a> Lexer<'a> {
@@ -131,12 +136,24 @@ impl<'a> Lexer<'a> {
     /// let buffer = std::fs::read_to_string("yourSourceCode.js").unwrap();
     /// let lexer = boa::syntax::lexer::Lexer::new(&buffer);
     /// ```
-    pub fn new(buffer: &'a str) -> Lexer<'a> {
-        Lexer {
+    pub fn new(buffer: &'a str) -> Self {
+        Self {
             tokens: Vec::new(),
             line_number: 1,
             column_number: 0,
             buffer: buffer.chars().peekable(),
+            interner: Interner::new(),
+        }
+    }
+
+    /// Creates a new lexer with the given interner.
+    pub fn new_with_interner(buffer: &'a str, interner: Interner) -> Self {
+        Self {
+            tokens: Vec::new(),
+            line_number: 1,
+            column_number: 0,
+            buffer: buffer.chars().peekable(),
+            interner,
         }
     }
 
@@ -357,7 +374,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     let str_length = buf.len() as u64;
-                    self.push_token(TokenKind::StringLiteral(buf));
+                    self.push_token(TokenKind::StringLiteral(self.interner.get_or_intern(buf)));
                     // Why +1? Quotation marks are not included,
                     // So technically it would be +2, (for both " ") but we want to be 1 less
                     // to compensate for the incrementing at the top
@@ -492,7 +509,7 @@ impl<'a> Lexer<'a> {
                             if let Ok(keyword) = FromStr::from_str(slice) {
                                 TokenKind::Keyword(keyword)
                             } else {
-                                TokenKind::identifier(slice)
+                                TokenKind::Identifier(self.interner.get_or_intern(slice))
                             }
                         }
                     });
@@ -607,7 +624,7 @@ impl<'a> Lexer<'a> {
                                     // body was parsed, now look for flags
                                     let flags = self.take_char_while(char::is_alphabetic)?;
                                     self.push_token(TokenKind::RegularExpressionLiteral(
-                                        body, flags,
+                                        self.interner.get_or_intern(body), self.interner.get_or_intern(flags),
                                     ));
                                 } else {
                                     // failed to parse regex, restore original buffer position and

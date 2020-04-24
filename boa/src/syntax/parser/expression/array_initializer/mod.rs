@@ -11,9 +11,12 @@
 mod tests;
 
 use super::AssignmentExpression;
-use crate::syntax::{
-    ast::{constant::Const, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{constant::Const, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Parses an array literal.
@@ -47,7 +50,7 @@ impl ArrayLiteral {
 impl TokenParser for ArrayLiteral {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -73,12 +76,12 @@ impl TokenParser for ArrayLiteral {
                 .is_some()
             {
                 let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                    .parse(cursor)?;
+                    .parse(cursor, interner)?;
                 elements.push(Node::spread(node));
             } else {
                 elements.push(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 );
             }
             cursor.next_if(TokenKind::Punctuator(Punctuator::Comma));

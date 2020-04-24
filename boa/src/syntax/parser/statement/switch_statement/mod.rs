@@ -1,12 +1,15 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator},
-    parser::{
-        AllowAwait, AllowReturn, AllowYield, Cursor, Expression, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator},
+        parser::{
+            AllowAwait, AllowReturn, AllowYield, Cursor, Expression, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Switch statement parsing.
@@ -43,16 +46,18 @@ impl SwitchStatement {
 impl TokenParser for SwitchStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Switch, "switch statement")?;
-        cursor.expect(Punctuator::OpenParen, "switch statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Switch, "switch statement", interner)?;
+        cursor.expect(Punctuator::OpenParen, "switch statement", interner)?;
 
-        let condition = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let condition =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "switch statement")?;
+        cursor.expect(Punctuator::CloseParen, "switch statement", interner)?;
 
         let (cases, default) =
-            CaseBlock::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?;
+            CaseBlock::new(self.allow_yield, self.allow_await, self.allow_return)
+                .parse(cursor, interner)?;
 
         Ok(Node::switch::<_, _, _, Node>(condition, cases, default))
     }
@@ -90,8 +95,12 @@ impl CaseBlock {
 impl TokenParser for CaseBlock {
     type Output = (Vec<(Node, Vec<Node>)>, Option<Node>);
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
-        cursor.expect(Punctuator::OpenBlock, "switch case block")?;
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
+        cursor.expect(Punctuator::OpenBlock, "switch case block", interner)?;
 
         // CaseClauses[?Yield, ?Await, ?Return]opt
         // CaseClauses[?Yield, ?Await, ?Return]optDefaultClause[?Yield, ?Await, ?Return]CaseClauses[?Yield, ?Await, ?Return]opt

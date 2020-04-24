@@ -6,9 +6,12 @@
 //! [spec]: https://tc39.es/ecma262/#sec-update-expressions
 
 use super::lhs_expression::LeftHandSideExpression;
-use crate::syntax::{
-    ast::{node::Node, op::UnaryOp, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{node::Node, op::UnaryOp, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Parses an update expression.
@@ -40,7 +43,7 @@ impl UpdateExpression {
 impl TokenParser for UpdateExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor
             .peek_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
@@ -52,7 +55,7 @@ impl TokenParser for UpdateExpression {
                 return Ok(Node::unary_op(
                     UnaryOp::IncrementPre,
                     LeftHandSideExpression::new(self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             }
             TokenKind::Punctuator(Punctuator::Dec) => {
@@ -62,13 +65,14 @@ impl TokenParser for UpdateExpression {
                 return Ok(Node::unary_op(
                     UnaryOp::DecrementPre,
                     LeftHandSideExpression::new(self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             }
             _ => {}
         }
 
-        let lhs = LeftHandSideExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
+        let lhs = LeftHandSideExpression::new(self.allow_yield, self.allow_await)
+            .parse(cursor, interner)?;
         if let Some(tok) = cursor.peek(0) {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Inc) => {

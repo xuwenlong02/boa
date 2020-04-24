@@ -4,12 +4,15 @@
 mod tests;
 mod variable_statement;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        AllowAwait, AllowIn, AllowYield, Cursor, FunctionDeclaration, Initializer, ParseError,
-        ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowIn, AllowYield, Cursor, FunctionDeclaration, Initializer, ParseError,
+            ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 pub(super) use variable_statement::{VariableDeclarationList, VariableStatement};
 
@@ -41,7 +44,7 @@ impl Declaration {
 impl TokenParser for Declaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor
             .peek_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
@@ -49,10 +52,12 @@ impl TokenParser for Declaration {
         match tok.kind {
             TokenKind::Keyword(Keyword::Function) => {
                 // HoistableDeclaration
-                FunctionDeclaration::new(self.allow_yield, self.allow_await, false).parse(cursor)
+                FunctionDeclaration::new(self.allow_yield, self.allow_await, false)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Const) | TokenKind::Keyword(Keyword::Let) => {
-                LexicalDeclaration::new(true, self.allow_yield, self.allow_await).parse(cursor)
+                LexicalDeclaration::new(true, self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)
             }
             _ => unreachable!("unknown token found"),
         }
@@ -86,7 +91,7 @@ impl LexicalDeclaration {
 impl TokenParser for LexicalDeclaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor
             .next_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
@@ -94,11 +99,11 @@ impl TokenParser for LexicalDeclaration {
         match tok.kind {
             TokenKind::Keyword(Keyword::Const) => {
                 BindingList::new(self.allow_in, self.allow_yield, self.allow_await, true)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Let) => {
                 BindingList::new(self.allow_in, self.allow_yield, self.allow_await, false)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             _ => unreachable!("unknown token found"),
         }
@@ -139,7 +144,7 @@ impl BindingList {
 impl TokenParser for BindingList {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // Create vectors to store the variable declarations
         // Const and Let signatures are slightly different, Const needs definitions, Lets don't
         let mut let_decls = Vec::new();
@@ -152,9 +157,10 @@ impl TokenParser for BindingList {
             let name = if let TokenKind::Identifier(ref name) = token.kind {
                 name.clone()
             } else {
-                return Err(ParseError::Expected(
-                    vec![TokenKind::identifier("identifier")],
-                    token.clone(),
+                return Err(ParseError::expected(
+                    vec![String::from("identifier")],
+                    token.display(interner).to_string(),
+                    token.pos,
                     if self.is_const {
                         "const declaration"
                     } else {
@@ -168,7 +174,7 @@ impl TokenParser for BindingList {
                 Some(token) if token.kind == TokenKind::Punctuator(Punctuator::Assign) => {
                     let init = Some(
                         Initializer::new(self.allow_in, self.allow_yield, self.allow_await)
-                            .parse(cursor)?,
+                            .parse(cursor, interner)?,
                     );
                     if self.is_const {
                         const_decls.push((name, init.unwrap()));
@@ -178,12 +184,13 @@ impl TokenParser for BindingList {
                 }
                 _ => {
                     if self.is_const {
-                        return Err(ParseError::Expected(
-                            vec![TokenKind::Punctuator(Punctuator::Assign)],
-                            cursor
-                                .next_skip_lineterminator()
-                                .ok_or(ParseError::AbruptEnd)?
-                                .clone(),
+                        let tok = cursor
+                            .next_skip_lineterminator()
+                            .ok_or(ParseError::AbruptEnd)?;
+                        return Err(ParseError::expected(
+                            vec![Punctuator::Assign.to_string()],
+                            tok.display(interner).to_string(),
+                            tok.pos,
                             "const declaration",
                         ));
                     } else {
@@ -192,7 +199,7 @@ impl TokenParser for BindingList {
                 }
             }
 
-            if !lexical_declaration_continuation(cursor)? {
+            if !lexical_declaration_continuation(cursor, interner)? {
                 break;
             }
         }
@@ -212,7 +219,10 @@ impl TokenParser for BindingList {
 /// indicates the same as a `;`.
 ///
 /// More information: <https://tc39.es/ecma262/#prod-LexicalDeclaration>.
-fn lexical_declaration_continuation(cursor: &mut Cursor<'_>) -> Result<bool, ParseError> {
+fn lexical_declaration_continuation(
+    cursor: &mut Cursor<'_>,
+    interner: &Interner,
+) -> Result<bool, ParseError> {
     if let Some(tok) = cursor.peek(0) {
         match tok.kind {
             TokenKind::LineTerminator | TokenKind::Punctuator(Punctuator::Semicolon) => Ok(false),
@@ -222,14 +232,18 @@ fn lexical_declaration_continuation(cursor: &mut Cursor<'_>) -> Result<bool, Par
                     .ok_or(ParseError::AbruptEnd)?;
                 Ok(true)
             }
-            _ => Err(ParseError::Expected(
-                vec![
-                    TokenKind::Punctuator(Punctuator::Semicolon),
-                    TokenKind::LineTerminator,
-                ],
-                cursor.next().ok_or(ParseError::AbruptEnd)?.clone(),
-                "lexical declaration",
-            )),
+            _ => {
+                let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
+                Err(ParseError::expected(
+                    vec![
+                        Punctuator::Semicolon.to_string(),
+                        TokenKind::LineTerminator.display(interner).to_string(),
+                    ],
+                    tok.display(interner).to_string(),
+                    tok.pos,
+                    "lexical declaration",
+                ))
+            }
         }
     } else {
         Ok(false)

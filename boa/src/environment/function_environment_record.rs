@@ -15,10 +15,12 @@ use crate::{
         environment_record_trait::EnvironmentRecordTrait,
         lexical_environment::{Environment, EnvironmentType},
     },
+    InternerSym,
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
 use std::collections::hash_map::HashMap;
+use string_interner::Symbol;
 
 /// Different binding status for `this`.
 /// Usually set on a function environment record
@@ -35,7 +37,7 @@ pub enum BindingStatus {
 /// <https://tc39.es/ecma262/#table-16>
 #[derive(Debug, Trace, Finalize, Clone)]
 pub struct FunctionEnvironmentRecord {
-    pub env_rec: HashMap<String, DeclarativeEnvironmentRecordBinding>,
+    pub env_rec: HashMap<InternerSym, DeclarativeEnvironmentRecordBinding>,
     /// This is the this value used for this invocation of the function.
     pub this_value: Value,
     /// If the value is "lexical", this is an ArrowFunction and does not have a local this value.
@@ -95,14 +97,17 @@ impl FunctionEnvironmentRecord {
 impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
     // TODO: get_super_base can't implement until GetPrototypeof is implemented on object
 
-    fn has_binding(&self, name: &str) -> bool {
-        self.env_rec.contains_key(name)
+    fn has_binding(&self, name: InternerSym) -> bool {
+        self.env_rec.contains_key(&name)
     }
 
-    fn create_mutable_binding(&mut self, name: String, deletion: bool) {
+    fn create_mutable_binding(&mut self, name: InternerSym, deletion: bool) {
         if self.env_rec.contains_key(&name) {
             // TODO: change this when error handling comes into play
-            panic!("Identifier {} has already been declared", name);
+            panic!(
+                "Identifier str#{:#X} has already been declared",
+                name.to_usize()
+            );
         }
 
         self.env_rec.insert(
@@ -116,10 +121,13 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
         );
     }
 
-    fn create_immutable_binding(&mut self, name: String, strict: bool) -> bool {
+    fn create_immutable_binding(&mut self, name: InternerSym, strict: bool) -> bool {
         if self.env_rec.contains_key(&name) {
             // TODO: change this when error handling comes into play
-            panic!("Identifier {} has already been declared", name);
+            panic!(
+                "Identifier str#{:#X} has already been declared",
+                name.to_usize()
+            );
         }
 
         self.env_rec.insert(
@@ -135,12 +143,15 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
         true
     }
 
-    fn initialize_binding(&mut self, name: &str, value: Value) {
-        if let Some(ref mut record) = self.env_rec.get_mut(name) {
+    fn initialize_binding(&mut self, name: InternerSym, value: Value) {
+        if let Some(ref mut record) = self.env_rec.get_mut(&name) {
             match record.value {
                 Some(_) => {
                     // TODO: change this when error handling comes into play
-                    panic!("Identifier {} has already been defined", name);
+                    panic!(
+                        "Identifier str#{:#X} has already been defined",
+                        name.to_usize()
+                    );
                 }
                 None => record.value = Some(value),
             }
@@ -148,11 +159,14 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
     }
 
     #[allow(clippy::else_if_without_else)]
-    fn set_mutable_binding(&mut self, name: &str, value: Value, mut strict: bool) {
-        if self.env_rec.get(name).is_none() {
+    fn set_mutable_binding(&mut self, name: InternerSym, value: Value, mut strict: bool) {
+        if self.env_rec.get(&name).is_none() {
             if strict {
                 // TODO: change this when error handling comes into play
-                panic!("Reference Error: Cannot set mutable binding for {}", name);
+                panic!(
+                    "Reference Error: Cannot set mutable binding for str#{:#X}",
+                    name.to_usize()
+                );
             }
 
             self.create_mutable_binding(name.to_owned(), true);
@@ -160,26 +174,32 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
             return;
         }
 
-        let record: &mut DeclarativeEnvironmentRecordBinding = self.env_rec.get_mut(name).unwrap();
+        let record: &mut DeclarativeEnvironmentRecordBinding = self.env_rec.get_mut(&name).unwrap();
         if record.strict {
             strict = true
         }
 
         if record.value.is_none() {
             // TODO: change this when error handling comes into play
-            panic!("Reference Error: Cannot set mutable binding for {}", name);
+            panic!(
+                "Reference Error: Cannot set mutable binding for str#{:#X}",
+                name.to_usize()
+            );
         }
 
         if record.mutable {
             record.value = Some(value);
         } else if strict {
             // TODO: change this when error handling comes into play
-            panic!("TypeError: Cannot mutate an immutable binding {}", name);
+            panic!(
+                "TypeError: Cannot mutate an immutable binding str#{:#X}",
+                name.to_usize()
+            );
         }
     }
 
-    fn get_binding_value(&self, name: &str, _strict: bool) -> Value {
-        if let Some(binding) = self.env_rec.get(name) {
+    fn get_binding_value(&self, name: InternerSym, _strict: bool) -> Value {
+        if let Some(binding) = self.env_rec.get(&name) {
             binding
                 .value
                 .as_ref()
@@ -187,15 +207,18 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
                 .clone()
         } else {
             // TODO: change this when error handling comes into play
-            panic!("ReferenceError: Cannot get binding value for {}", name);
+            panic!(
+                "ReferenceError: Cannot get binding value for str#{:#X}",
+                name.to_usize()
+            );
         }
     }
 
-    fn delete_binding(&mut self, name: &str) -> bool {
-        match self.env_rec.get(name) {
+    fn delete_binding(&mut self, name: InternerSym) -> bool {
+        match self.env_rec.get(&name) {
             Some(binding) => {
                 if binding.can_delete {
-                    self.env_rec.remove(name);
+                    self.env_rec.remove(&name);
                     true
                 } else {
                     false

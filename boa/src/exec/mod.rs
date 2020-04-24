@@ -20,6 +20,7 @@ use crate::{
         node::{MethodDefinitionKind, Node, PropertyDefinition},
         op::{AssignOp, BinOp, BitOp, CompOp, LogOp, NumOp, UnaryOp},
     },
+    Interner, InternerSym,
 };
 use gc::{Gc, GcCell};
 use std::{
@@ -30,7 +31,7 @@ use std::{
 /// An execution engine
 pub trait Executor {
     /// Make a new execution engine
-    fn new(realm: Realm) -> Self;
+    fn new(realm: Realm, interner: Interner) -> Self;
     /// Run an expression
     fn run(&mut self, expr: &Node) -> ResultValue;
 }
@@ -41,6 +42,8 @@ pub struct Interpreter {
     is_return: bool,
     /// realm holds both the global object and the environment
     pub realm: Realm,
+    /// Interner with all the strings.
+    interner: Interner,
 }
 
 fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
@@ -60,9 +63,10 @@ fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
 }
 
 impl Executor for Interpreter {
-    fn new(realm: Realm) -> Self {
+    fn new(realm: Realm, interner: Interner) -> Self {
         Self {
             realm,
+            interner,
             is_return: false,
         }
     }
@@ -105,7 +109,7 @@ impl Executor for Interpreter {
 
                 Ok(obj)
             }
-            Node::Local(ref name) => {
+            Node::Local(name) => {
                 let val = self.realm.environment.get_binding_value(name);
                 Ok(val)
             }

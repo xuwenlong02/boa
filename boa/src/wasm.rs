@@ -2,6 +2,7 @@ use crate::{
     exec::{Executor, Interpreter},
     realm::Realm,
     syntax::{ast::node::Node, lexer::Lexer, parser::Parser},
+    Interner,
 };
 use wasm_bindgen::prelude::*;
 
@@ -27,7 +28,7 @@ pub fn evaluate(src: &str) -> String {
     // Setup executor
     let node: Node;
 
-    match Parser::new(&tokens).parse_all() {
+    match Parser::new(&tokens, lexer.interner).parse_all() {
         Ok(v) => {
             node = v;
         }
@@ -37,8 +38,9 @@ pub fn evaluate(src: &str) -> String {
         }
     }
     // Create new Realm
-    let realm = Realm::create();
-    let mut engine: Interpreter = Executor::new(realm);
+    let mut interner = Interner::new();
+    let realm = Realm::create(&mut interner);
+    let mut engine: Interpreter = Executor::new(realm, interner);
     let result = engine.run(&node);
     match result {
         Ok(v) => v.to_string(),

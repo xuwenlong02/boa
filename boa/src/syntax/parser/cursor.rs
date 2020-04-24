@@ -1,9 +1,12 @@
 //! Cursor implementation for the parser.
 
 use super::ParseError;
-use crate::syntax::ast::{
-    punc::Punctuator,
-    token::{Token, TokenKind},
+use crate::{
+    syntax::ast::{
+        punc::Punctuator,
+        token::{Token, TokenKind},
+    },
+    Interner,
 };
 
 /// Token cursor.
@@ -118,7 +121,12 @@ impl<'a> Cursor<'a> {
     /// Returns an error if the next token is not of kind `kind`.
     ///
     /// Note: it will consume the next token.
-    pub(super) fn expect<K>(&mut self, kind: K, routine: &'static str) -> Result<(), ParseError>
+    pub(super) fn expect<K>(
+        &mut self,
+        kind: K,
+        routine: &'static str,
+        interner: &Interner,
+    ) -> Result<(), ParseError>
     where
         K: Into<TokenKind>,
     {
@@ -128,9 +136,11 @@ impl<'a> Cursor<'a> {
         if next_token.kind == kind {
             Ok(())
         } else {
-            Err(ParseError::Expected(
-                vec![kind],
-                next_token.clone(),
+            let tok = next_token.clone();
+            Err(ParseError::expected(
+                vec![kind.display(interner).to_string()],
+                tok.display(interner).to_string(),
+                tok.pos,
                 routine,
             ))
         }
@@ -145,6 +155,7 @@ impl<'a> Cursor<'a> {
         &mut self,
         do_while: bool,
         routine: &'static str,
+        interner: &Interner,
     ) -> Result<(), ParseError> {
         match self.peek(0) {
             Some(tk) => match tk.kind {
@@ -169,9 +180,10 @@ impl<'a> Cursor<'a> {
                         }
                     }
 
-                    Err(ParseError::Expected(
-                        vec![TokenKind::Punctuator(Punctuator::Semicolon)],
-                        tk.clone(),
+                    Err(ParseError::expected(
+                        vec![Punctuator::Semicolon.to_string()],
+                        tk.display(interner).to_string(),
+                        tk.pos,
                         routine,
                     ))
                 }

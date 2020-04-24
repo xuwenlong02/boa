@@ -42,15 +42,68 @@ use crate::{
     realm::Realm,
     syntax::{ast::node::Node, lexer::Lexer, parser::Parser},
 };
+use gc::{Finalize, Trace};
+use std::{num::NonZeroUsize, usize};
+use string_interner::{StringInterner, Symbol};
 
 #[cfg(feature = "serde-ast")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde-ast")]
 pub use serde_json;
+
+/// Internal type for the string interner.
+type Interner = StringInterner<InternerSym>;
+
+/// Symbol used for the internal string interner.
+#[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct InternerSym {
+    val: NonZeroUsize,
+}
+
+impl Symbol for InternerSym {
+    /// Creates an `InternerSym` from the given `usize`.
+    ///
+    /// # Panics
+    ///
+    /// If the given `usize` is `usize::MAX`.
+    fn from_usize(val: usize) -> Self {
+        assert!(
+            val != usize::MAX,
+            "symbol value {} is too large and not supported by `InternerSym` type",
+            val
+        );
+        InternerSym {
+            val: NonZeroUsize::new(val + 1).unwrap_or_else(|| {
+                unreachable!("should never fail because `val + 1` is nonzero and `<= usize::MAX`")
+            }),
+        }
+    }
+
+    fn to_usize(self) -> usize {
+        self.val.get() - 1
+    }
+}
+
+impl Finalize for InternerSym {}
+unsafe impl Trace for InternerSym {
+    #[inline]
+    unsafe fn trace(&self) {}
+    #[inline]
+    unsafe fn root(&self) {}
+    #[inline]
+    unsafe fn unroot(&self) {}
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self)
+    }
+}
 
 fn parser_expr(src: &str) -> Result<Node, String> {
     let mut lexer = Lexer::new(src);
     lexer.lex().map_err(|e| format!("SyntaxError: {}", e))?;
     let tokens = lexer.tokens;
-    Parser::new(&tokens)
+    Parser::new(&tokens, lexer.interner)
         .parse_all()
         .map_err(|e| format!("ParsingError: {}", e))
 }
@@ -90,7 +143,8 @@ pub fn forward_val(engine: &mut Interpreter, src: &str) -> ResultValue {
 /// Create a clean Interpreter and execute the code
 pub fn exec(src: &str) -> String {
     // Create new Realm
-    let realm = Realm::create();
-    let mut engine: Interpreter = Executor::new(realm);
+    let mut interner = Interner::new();
+    let realm = Realm::create(&mut interner);
+    let mut engine: Interpreter = Executor::new(realm, interner);
     forward(&mut engine, src)
 }

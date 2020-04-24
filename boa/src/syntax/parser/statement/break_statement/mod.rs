@@ -1,9 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Break statement parsing
@@ -37,11 +40,11 @@ impl BreakStatement {
 impl TokenParser for BreakStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Break, "break statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Break, "break statement", interner)?;
 
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        match &tok.kind {
+        match tok.kind {
             TokenKind::LineTerminator
             | TokenKind::Punctuator(Punctuator::Semicolon)
             | TokenKind::Punctuator(Punctuator::CloseBlock) => {
@@ -49,14 +52,15 @@ impl TokenParser for BreakStatement {
                 Ok(Node::Break(None))
             }
             TokenKind::Identifier(name) => Ok(Node::break_node(name)),
-            _ => Err(ParseError::Expected(
+            _ => Err(ParseError::expected(
                 vec![
-                    TokenKind::Punctuator(Punctuator::Semicolon),
-                    TokenKind::Punctuator(Punctuator::CloseBlock),
-                    TokenKind::LineTerminator,
-                    TokenKind::identifier("identifier"),
+                    Punctuator::Semicolon.to_string(),
+                    Punctuator::CloseBlock.to_string(),
+                    TokenKind::LineTerminator.display(interner).to_string(),
+                    String::from("identifier"),
                 ],
-                tok.clone(),
+                tok.display(interner).to_string(),
+                tok.pos,
                 "break statement",
             )),
         }

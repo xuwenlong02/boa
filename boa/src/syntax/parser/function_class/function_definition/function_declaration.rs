@@ -1,10 +1,13 @@
 use super::FormalParameters;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        AllowAwait, AllowDefault, AllowYield, Cursor, ParseError, ParseResult, StatementList,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowDefault, AllowYield, Cursor, ParseError, ParseResult, StatementList,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Function declaration parsing
@@ -45,8 +48,8 @@ impl FunctionDeclaration {
 impl TokenParser for FunctionDeclaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Function, "function declaration")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Function, "function declaration", interner)?;
 
         let token = cursor
             .next_skip_lineterminator()
@@ -54,9 +57,10 @@ impl TokenParser for FunctionDeclaration {
         let name = if let TokenKind::Identifier(name) = &token.kind {
             name.clone()
         } else {
-            return Err(ParseError::Expected(
-                vec![TokenKind::identifier("function name")],
-                token.clone(),
+            return Err(ParseError::expected(
+                vec![String::from("function name")],
+                token.display(interner).to_string(),
+                token.pos,
                 "function declaration",
             ));
         };
@@ -64,17 +68,18 @@ impl TokenParser for FunctionDeclaration {
         cursor.expect(
             TokenKind::Punctuator(Punctuator::OpenParen),
             "function declaration",
+            interner,
         )?;
 
-        let params = FormalParameters::new(false, false).parse(cursor)?;
+        let params = FormalParameters::new(false, false).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::OpenBlock, "function declaration")?;
+        cursor.expect(Punctuator::OpenBlock, "function declaration", interner)?;
 
         let body = StatementList::new(self.allow_yield, self.allow_await, true, true)
-            .parse(cursor)
+            .parse(cursor, interner)
             .map(Node::StatementList)?;
 
-        cursor.expect(Punctuator::CloseBlock, "function declaration")?;
+        cursor.expect(Punctuator::CloseBlock, "function declaration", interner)?;
 
         Ok(Node::function_decl(name, params, body))
     }

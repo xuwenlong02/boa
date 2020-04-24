@@ -5,18 +5,27 @@ use crate::{
         value::{to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
+    Interner, InternerSym,
 };
 use gc::Gc;
 
 /// Create a new error
-pub fn make_error(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn make_error(
+    this: &Value,
+    args: &[Value],
+    _: &mut Interpreter,
+    interner: &Interner,
+) -> ResultValue {
     if !args.is_empty() {
         this.set_field_slice(
             "message",
             to_value(
-                args.get(0)
-                    .expect("failed getting error message")
-                    .to_string(),
+                interner.get_or_intern(
+                    args.get(0)
+                        .expect("failed getting error message")
+                        .display(interner)
+                        .to_string(),
+                ),
             ),
         );
     }
@@ -26,10 +35,17 @@ pub fn make_error(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultVa
     Ok(Gc::new(ValueData::Undefined))
 }
 /// Get the string representation of the error
-pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
-    let name = this.get_field_slice("name");
-    let message = this.get_field_slice("message");
-    Ok(to_value(format!("{}: {}", name, message)))
+pub fn to_string(
+    this: &Value,
+    _: &[Value],
+    _: &mut Interpreter,
+    interner: &Interner,
+) -> ResultValue {
+    let name = this.get_field_slice(interner.get_or_intern("name"));
+    let message = this.get_field_slice(interner.get_or_intern("message"));
+    Ok(to_value(
+        interner.get_or_intern(format!("{}: {}", name, message)),
+    ))
 }
 /// Create a new `Error` object
 pub fn _create(global: &Value) -> Value {

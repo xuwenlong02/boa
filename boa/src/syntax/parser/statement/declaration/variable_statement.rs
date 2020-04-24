@@ -1,9 +1,13 @@
 use super::lexical_declaration_continuation;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        AllowAwait, AllowIn, AllowYield, Cursor, Initializer, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowIn, AllowYield, Cursor, Initializer, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner, InternerSym,
 };
 
 /// Variable statement parsing.
@@ -39,13 +43,13 @@ impl VariableStatement {
 impl TokenParser for VariableStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Var, "variable statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Var, "variable statement", interner)?;
 
-        let decl_list =
-            VariableDeclarationList::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let decl_list = VariableDeclarationList::new(true, self.allow_yield, self.allow_await)
+            .parse(cursor, interner)?;
 
-        cursor.expect_semicolon(false, "variable statement")?;
+        cursor.expect_semicolon(false, "variable statement", interner)?;
 
         Ok(decl_list)
     }
@@ -89,15 +93,15 @@ impl VariableDeclarationList {
 impl TokenParser for VariableDeclarationList {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut list = Vec::new();
 
         loop {
             list.push(
                 VariableDeclaration::new(self.allow_in, self.allow_yield, self.allow_await)
-                    .parse(cursor)?,
+                    .parse(cursor, interner)?,
             );
-            if !lexical_declaration_continuation(cursor)? {
+            if !lexical_declaration_continuation(cursor, interner)? {
                 break;
             }
         }
@@ -136,18 +140,23 @@ impl VariableDeclaration {
 }
 
 impl TokenParser for VariableDeclaration {
-    type Output = (String, Option<Node>);
+    type Output = (InternerSym, Option<Node>);
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let tok = cursor
             .next_skip_lineterminator()
             .ok_or(ParseError::AbruptEnd)?;
-        let name = if let TokenKind::Identifier(name) = &tok.kind {
-            name.clone()
+        let name = if let TokenKind::Identifier(name) = tok.kind {
+            name
         } else {
-            return Err(ParseError::Expected(
-                vec![TokenKind::identifier("identifier")],
-                tok.clone(),
+            return Err(ParseError::expected(
+                vec![String::from("identifier")],
+                tok.display(interner).to_string(),
+                tok.pos,
                 "variable declaration",
             ));
         };
@@ -157,7 +166,7 @@ impl TokenParser for VariableDeclaration {
                 name,
                 Some(
                     Initializer::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ),
             )),
             _ => Ok((name, None)),

@@ -8,16 +8,19 @@
 //! [spec]: https://tc39.es/ecma262/#sec-arrow-function-definitions
 
 use super::function_definition::{FormalParameters, FunctionBody};
-use crate::syntax::{
-    ast::{
-        node::{FormalParameter, Node},
-        punc::Punctuator,
-        token::TokenKind,
+use crate::{
+    syntax::{
+        ast::{
+            node::{FormalParameter, Node},
+            punc::Punctuator,
+            token::TokenKind,
+        },
+        parser::{
+            AllowAwait, AllowIn, AllowYield, AssignmentExpression, Cursor, ParseError, ParseResult,
+            TokenParser,
+        },
     },
-    parser::{
-        AllowAwait, AllowIn, AllowYield, AssignmentExpression, Cursor, ParseError, ParseResult,
-        TokenParser,
-    },
+    Interner,
 };
 
 /// Arrow function parsing.
@@ -58,11 +61,11 @@ impl ArrowFunction {
 impl TokenParser for ArrowFunction {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
         let params = match &next_token.kind {
             TokenKind::Punctuator(Punctuator::OpenParen) => {
-                FormalParameters::new(self.allow_yield, self.allow_await).parse(cursor)?
+                FormalParameters::new(self.allow_yield, self.allow_await).parse(cursor, interner)?
             }
             TokenKind::Identifier(param_name) => vec![FormalParameter {
                 init: None,
@@ -70,23 +73,24 @@ impl TokenParser for ArrowFunction {
                 is_rest_param: false,
             }],
             _ => {
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![
-                        TokenKind::Punctuator(Punctuator::OpenParen),
-                        TokenKind::identifier("identifier"),
+                        Punctuator::OpenParen.to_string(),
+                        String::from("identifier"),
                     ],
-                    next_token.clone(),
+                    next_token.display(interner).to_string(),
+                    next_token.pos,
                     "arrow function",
                 ))
             }
         };
         // No LineTerminator here.
 
-        cursor.expect(Punctuator::Arrow, "arrow function")?;
+        cursor.expect(Punctuator::Arrow, "arrow function", interner)?;
 
         cursor.skip(|tk| tk.kind == TokenKind::LineTerminator);
 
-        let body = ConciseBody::new(self.allow_in).parse(cursor)?;
+        let body = ConciseBody::new(self.allow_in).parse(cursor, interner)?;
 
         Ok(Node::arrow_function_decl(params, body))
     }
@@ -113,18 +117,22 @@ impl ConciseBody {
 impl TokenParser for ConciseBody {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         match cursor.peek(0).ok_or(ParseError::AbruptEnd)?.kind {
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
                 let _ = cursor.next();
                 let body = FunctionBody::new(false, false)
-                    .parse(cursor)
+                    .parse(cursor, interner)
                     .map(Node::StatementList)?;
-                cursor.expect(Punctuator::CloseBlock, "arrow function")?;
+                cursor.expect(Punctuator::CloseBlock, "arrow function", interner)?;
                 Ok(body)
             }
             _ => Ok(Node::return_node(
-                ExpressionBody::new(self.allow_in, false).parse(cursor)?,
+                ExpressionBody::new(self.allow_in, false).parse(cursor, interner)?,
             )),
         }
     }
@@ -154,7 +162,7 @@ impl ExpressionBody {
 impl TokenParser for ExpressionBody {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        AssignmentExpression::new(self.allow_in, false, self.allow_await).parse(cursor)
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        AssignmentExpression::new(self.allow_in, false, self.allow_await).parse(cursor, interner)
     }
 }
