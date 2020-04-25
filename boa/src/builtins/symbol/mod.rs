@@ -97,8 +97,6 @@ pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue 
 /// [spec]: https://tc39.es/ecma262/#sec-symbol-constructor
 /// [mdn]:
 pub fn create_constructor(global: &Value) -> Value {
-    // symbol_constructor.set_internal_method("call", call_symbol);
-
     // Create prototype
     let symbol_prototype = ValueData::new_obj(Some(&global));
 

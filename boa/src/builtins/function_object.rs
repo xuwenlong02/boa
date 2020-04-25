@@ -64,7 +64,7 @@ pub struct Function {
     pub params: Vec<FormalParameter>,
     /// This Mode
     pub this_mode: ThisMode,
-    // Environment
+    // Environment, built-in functions don't need Environments
     pub environment: Option<Environment>,
 }
 
