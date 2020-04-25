@@ -20,6 +20,7 @@ mod tests;
 
 use crate::{
     builtins::{
+        function_object::{Function, FunctionBody, ThisMode},
         object::{
             internal_methods_trait::ObjectInternalMethods, Object, ObjectKind, INSTANCE_PROTOTYPE,
             PROTOTYPE,
@@ -96,24 +97,24 @@ pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue 
 /// [spec]: https://tc39.es/ecma262/#sec-symbol-constructor
 /// [mdn]:
 pub fn create_constructor(global: &Value) -> Value {
-    // Create Symbol constructor (or function in Symbol's case)
-    let mut symbol_constructor = Object::default();
-    symbol_constructor.set_internal_method("call", call_symbol);
+    // symbol_constructor.set_internal_method("call", call_symbol);
 
     // Create prototype
-    let mut symbol_prototype = Object::default();
+    let symbol_prototype = ValueData::new_obj(Some(&global));
+
+    // Create Symbol constructor (or function in Symbol's case)
+    let symbol_constructor = Function::create_builtin(
+        symbol_prototype.clone(),
+        vec![],
+        FunctionBody::BuiltIn(call_symbol),
+        ThisMode::NonLexical,
+    );
 
     // Symbol.prototype[[Prototype]] points to Object.prototype
     // Symbol Constructor -> Symbol Prototype -> Object Prototype
-    let object_prototype = global.get_field_slice("Object").get_field_slice(PROTOTYPE);
-    symbol_prototype.set_internal_slot(INSTANCE_PROTOTYPE, object_prototype);
-    symbol_prototype.set_method("toString", to_string);
-
-    let symbol_prototype_val = to_value(symbol_prototype);
 
     let symbol_constructor_value = to_value(symbol_constructor);
-    symbol_prototype_val.set_field_slice("construcotor", symbol_constructor_value.clone());
-    symbol_constructor_value.set_field_slice(PROTOTYPE, symbol_prototype_val);
+    symbol_prototype.set_field_slice("constructor", symbol_constructor_value.clone());
 
     symbol_constructor_value
 }

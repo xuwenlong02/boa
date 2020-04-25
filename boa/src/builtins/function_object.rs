@@ -18,16 +18,7 @@ use std::fmt::{self, Debug};
 
 /// _fn(this, arguments, ctx) -> ResultValue_ - The signature of a built-in function
 pub type NativeFunctionData = fn(&Value, &[Value], &mut Interpreter) -> ResultValue;
-/// Sets the functionKind
-#[derive(Trace, Finalize, Debug, Clone)]
-pub enum FunctionKind {
-    Normal,
-    ClassConstructor,
-    Generator,
-    Async,
-    AsyncGenerator,
-    NonConstructor,
-}
+
 /// Sets the ConstructorKind
 #[derive(Debug, Copy, Clone)]
 pub enum ConstructorKind {
@@ -67,10 +58,6 @@ pub struct Function {
     pub internal_slots: Box<HashMap<String, Value>>,
     /// Properties
     pub properties: Box<HashMap<String, Property>>,
-    /// Function Kind
-    pub function_kind: FunctionKind,
-    /// is constructor??
-    pub is_constructor: bool,
     /// Function Body
     pub body: FunctionBody,
     /// Formal Paramaters
@@ -78,7 +65,7 @@ pub struct Function {
     /// This Mode
     pub this_mode: ThisMode,
     // Environment
-    pub environment: Environment,
+    pub environment: Option<Environment>,
 }
 
 impl Function {
@@ -91,18 +78,7 @@ impl Function {
         body: FunctionBody,
         scope: Environment,
         this_mode: ThisMode,
-        mut kind: FunctionKind,
     ) -> Function {
-        let needs_construct: bool;
-        match kind {
-            FunctionKind::Normal => needs_construct = true,
-            FunctionKind::NonConstructor => {
-                needs_construct = false;
-                kind = FunctionKind::Normal;
-            }
-            _ => needs_construct = false,
-        }
-
         // Create length property and set it's value
         let length_property = Property::new()
             .writable(false)
@@ -113,15 +89,47 @@ impl Function {
         let mut func = Function {
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
-            function_kind: kind,
-            is_constructor: needs_construct,
             body,
-            environment: scope,
+            environment: Some(scope),
             params: parameter_list,
             this_mode,
         };
 
         func.set_internal_slot("extensible", to_value(true));
+        func.set_internal_slot(PROTOTYPE, to_value(proto.clone()));
+        func.set_internal_slot("home_object", to_value(undefined()));
+
+        func.define_own_property(String::from("length"), length_property);
+        func
+    }
+
+    /// This will create a built-in function object
+    ///
+    /// <https://tc39.es/ecma262/#sec-createbuiltinfunction>
+    pub fn create_builtin(
+        proto: Value,
+        parameter_list: Vec<FormalParameter>,
+        body: FunctionBody,
+        this_mode: ThisMode,
+    ) -> Function {
+        // Create length property and set it's value
+        let length_property = Property::new()
+            .writable(false)
+            .enumerable(false)
+            .configurable(true)
+            .value(to_value(parameter_list.len()));
+
+        let mut func = Function {
+            internal_slots: Box::new(HashMap::new()),
+            properties: Box::new(HashMap::new()),
+            body,
+            environment: None,
+            params: parameter_list,
+            this_mode,
+        };
+
+        func.set_internal_slot("extensible", to_value(true));
+        // TODO: The below needs to be a property not internal slot
         func.set_internal_slot(PROTOTYPE, to_value(proto.clone()));
         func.set_internal_slot("home_object", to_value(undefined()));
 
@@ -141,8 +149,11 @@ impl Function {
     ) -> ResultValue {
         // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
         // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
-        let local_env =
-            new_function_environment(this.clone(), undefined(), Some(self.environment.clone()));
+        let local_env = new_function_environment(
+            this.clone(),
+            undefined(),
+            Some(self.environment.as_ref().unwrap().clone()),
+        );
 
         // Add argument bindings to the function environment
         for i in 0..self.params.len() {
@@ -170,6 +181,60 @@ impl Function {
 
         let result = match self.body {
             FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+            FunctionBody::Ordinary(ref body) => interpreter.run(body),
+        };
+
+        // local_env gets dropped here, its no longer needed
+        interpreter.realm.environment.pop();
+        result
+    }
+
+    /// This will handle calls for both ordinary and built-in functions
+    ///
+    /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-construct-argumentslist-newtarget>
+    pub fn construct(
+        &self,
+        this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
+        new_target: Value, // new `this` value
+        args_list: &Vec<Value>,
+        interpreter: &mut Interpreter,
+    ) -> ResultValue {
+        // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
+        // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+
+        // builtin constructs functions don't need a new env
+        let local_env = new_function_environment(
+            this.clone(),
+            new_target.clone(),
+            Some(self.environment.as_ref().unwrap().clone()),
+        );
+
+        // Add argument bindings to the function environment
+        for i in 0..self.params.len() {
+            let param = self.params.get(i).expect("Could not get param");
+            // Rest Parameters
+            if param.is_rest_param {
+                self.add_rest_param(param, i, args_list, interpreter, &local_env);
+                break;
+            }
+
+            let value = args_list.get(i).expect("Could not get value");
+            self.add_arguments_to_environment(param, value.clone(), &local_env);
+        }
+
+        // Add arguments object
+        let arguments_obj = create_unmapped_arguments_object(args_list);
+        local_env
+            .borrow_mut()
+            .create_mutable_binding("arguments".to_string(), false);
+        local_env
+            .borrow_mut()
+            .initialize_binding("arguments", arguments_obj);
+
+        interpreter.realm.environment.push(local_env);
+
+        let result = match self.body {
+            FunctionBody::BuiltIn(func) => func(&new_target, args_list, interpreter),
             FunctionBody::Ordinary(ref body) => interpreter.run(body),
         };
 

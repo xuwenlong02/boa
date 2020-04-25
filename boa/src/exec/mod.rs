@@ -7,7 +7,7 @@ use crate::{
     builtins::{
         array,
         function::{create_unmapped_arguments_object, Function, RegularFunction},
-        function_object::{Function as FunctionObject, FunctionBody, FunctionKind, ThisMode},
+        function_object::{Function as FunctionObject, FunctionBody, ThisMode},
         object::{
             internal_methods_trait::ObjectInternalMethods, ObjectKind, INSTANCE_PROTOTYPE,
             PROTOTYPE,
@@ -275,7 +275,6 @@ impl Executor for Interpreter {
                     FunctionBody::Ordinary(*expr.clone()),
                     self.realm.environment.get_current_environment().clone(),
                     ThisMode::Lexical,
-                    FunctionKind::Normal,
                 );
 
                 let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
@@ -420,9 +419,12 @@ impl Executor for Interpreter {
                     func_object.borrow().get_field_slice(PROTOTYPE),
                 );
 
-                let construct = func_object.get_internal_slot("construct");
-
-                match *construct {
+                match (*func_object).borrow() {
+                    ValueData::FunctionObj(func) => {
+                        func.borrow_mut()
+                            .deref_mut()
+                            .construct(&func_object, this, &v_args, self)
+                    }
                     ValueData::Function(ref inner_func) => match inner_func.clone().into_inner() {
                         Function::NativeFunc(ref ntv) => {
                             let func = ntv.data;
@@ -435,7 +437,7 @@ impl Executor for Interpreter {
                             // Create new scope
                             let env = &mut self.realm.environment;
                             env.push(new_function_environment(
-                                construct.clone(),
+                                func_object.get_internal_slot("construct").clone(),
                                 this,
                                 Some(env.get_current_environment_ref().clone()),
                             ));
