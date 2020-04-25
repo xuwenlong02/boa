@@ -5,7 +5,7 @@ use crate::{
         property::Property,
         value::{same_value, to_value, undefined, ResultValue, Value, ValueData},
     },
-    environment::lexical_environment::Environment,
+    environment::lexical_environment::{new_function_environment, Environment},
     exec::Executor,
     syntax::ast::node::{FormalParameter, Node},
     Interpreter,
@@ -78,7 +78,7 @@ pub struct Function {
     /// This Mode
     pub this_mode: ThisMode,
     // Environment
-    pub environment: Option<Environment>,
+    pub environment: Environment,
 }
 
 impl Function {
@@ -89,6 +89,7 @@ impl Function {
         proto: Value,
         parameter_list: Vec<FormalParameter>,
         body: FunctionBody,
+        scope: Environment,
         this_mode: ThisMode,
         mut kind: FunctionKind,
     ) -> Function {
@@ -115,7 +116,7 @@ impl Function {
             function_kind: kind,
             is_constructor: needs_construct,
             body,
-            environment: None,
+            environment: scope,
             params: parameter_list,
             this_mode,
         };
@@ -128,59 +129,44 @@ impl Function {
         func
     }
 
-    /// Sets the current environment on this function object
-    ///
-    /// This should be set after creating struct instance.
-    /// Environment can't be an internal slot due to it not being a JSValue
-    pub fn set_environment(&mut self, env: Environment) {
-        self.environment = Some(env);
-    }
-
-    /// Fetches the current environment on this function.
-    ///
-    /// The environment should be a Function Declarative Record
-    ///
-    /// It should exist, if not it will panic
-    pub fn get_environment(&self) -> Environment {
-        match self.environment.clone() {
-            Some(v) => v,
-            None => panic!("No environment set on Function!"),
-        }
-    }
-
     /// This will handle calls for both ordinary and built-in functions
     ///
+    /// <https://tc39.es/ecma262/#sec-prepareforordinarycall>
     /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-call-thisargument-argumentslist>
     pub fn call(
         &self,
-        this: &Value,
+        this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
+        // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
+        // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+        let local_env =
+            new_function_environment(this.clone(), undefined(), Some(self.environment.clone()));
+
         // Add argument bindings to the function environment
         for i in 0..self.params.len() {
             let param = self.params.get(i).expect("Could not get param");
             // Rest Parameters
             if param.is_rest_param {
-                self.add_rest_param(param, i, args_list, interpreter);
+                self.add_rest_param(param, i, args_list, interpreter, &local_env);
                 break;
             }
 
             let value = args_list.get(i).expect("Could not get value");
-
-            self.add_arguments_to_environment(param, value.clone());
+            self.add_arguments_to_environment(param, value.clone(), &local_env);
         }
 
         // Add arguments object
         let arguments_obj = create_unmapped_arguments_object(args_list);
-        self.get_environment()
+        local_env
             .borrow_mut()
             .create_mutable_binding("arguments".to_string(), false);
-        self.get_environment()
+        local_env
             .borrow_mut()
             .initialize_binding("arguments", arguments_obj);
 
-        interpreter.realm.environment.push(self.get_environment());
+        interpreter.realm.environment.push(local_env);
 
         let result = match self.body {
             FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
@@ -198,31 +184,37 @@ impl Function {
         index: usize,
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
+        local_env: &Environment,
     ) {
         // Create array of values
         let array = array::new_array(interpreter).unwrap();
         array::add_to_array_object(&array, &args_list[index..]).unwrap();
 
         // Create binding
-        self.get_environment()
+        local_env
             .borrow_mut()
             .create_mutable_binding(param.name.clone(), false);
 
         // Set Binding to value
-        self.get_environment()
+        local_env
             .borrow_mut()
             .initialize_binding(&param.name, array);
     }
 
     // Adds an argument to the environment
-    fn add_arguments_to_environment(&self, param: &FormalParameter, value: Value) {
+    fn add_arguments_to_environment(
+        &self,
+        param: &FormalParameter,
+        value: Value,
+        local_env: &Environment,
+    ) {
         // Create binding
-        self.get_environment()
+        local_env
             .borrow_mut()
             .create_mutable_binding(param.name.clone(), false);
 
         // Set Binding to value
-        self.get_environment()
+        local_env
             .borrow_mut()
             .initialize_binding(&param.name, value.clone());
     }

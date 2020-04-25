@@ -258,6 +258,7 @@ impl Executor for Interpreter {
                 array::add_to_array_object(&array, &elements)?;
                 Ok(array)
             }
+            // <https://tc39.es/ecma262/#sec-createdynamicfunction>
             Node::FunctionDecl(ref name, ref args, ref expr) => {
                 // Todo: Function.prototype doesn't exist yet, so the prototype right now is the Object.prototype
                 let proto = &self
@@ -272,23 +273,12 @@ impl Executor for Interpreter {
                     proto.clone(),
                     args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
                     FunctionBody::Ordinary(*expr.clone()),
+                    self.realm.environment.get_current_environment().clone(),
                     ThisMode::Lexical,
                     FunctionKind::Normal,
                 );
 
                 let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
-
-                // Create a new function environment
-                let func_env = new_function_environment(
-                    val.clone(),
-                    Gc::new(ValueData::Undefined),
-                    Some(self.realm.environment.get_current_environment().clone()),
-                );
-
-                // Set the environment in the property of Function
-                if let ValueData::FunctionObj(ref func) = *val {
-                    func.borrow_mut().set_environment(func_env);
-                }
 
                 // Set the name and assign it in the current environment
                 if name.is_some() {
