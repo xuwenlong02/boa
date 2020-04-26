@@ -269,13 +269,15 @@ impl Executor for Interpreter {
                     .get_field_slice("Object")
                     .get_field_slice("Prototype");
 
-                let func = FunctionObject::create_ordinary(
+                let mut func = FunctionObject::create_ordinary(
                     proto.clone(),
                     args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
-                    FunctionBody::Ordinary(*expr.clone()),
                     self.realm.environment.get_current_environment().clone(),
                     ThisMode::Lexical,
                 );
+
+                // Set the call body of this function
+                func.set_call_body(FunctionBody::Ordinary(*expr.clone()));
 
                 let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
 

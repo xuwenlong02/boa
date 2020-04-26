@@ -58,8 +58,10 @@ pub struct Function {
     pub internal_slots: Box<HashMap<String, Value>>,
     /// Properties
     pub properties: Box<HashMap<String, Property>>,
-    /// Function Body
-    pub body: FunctionBody,
+    /// Call Function body
+    pub call_body: Option<FunctionBody>,
+    // Construct function body
+    pub construct_body: Option<FunctionBody>,
     /// Formal Paramaters
     pub params: Vec<FormalParameter>,
     /// This Mode
@@ -75,7 +77,6 @@ impl Function {
     pub fn create_ordinary(
         proto: Value,
         parameter_list: Vec<FormalParameter>,
-        body: FunctionBody,
         scope: Environment,
         this_mode: ThisMode,
     ) -> Function {
@@ -89,7 +90,8 @@ impl Function {
         let mut func = Function {
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
-            body,
+            call_body: None,
+            construct_body: None,
             environment: Some(scope),
             params: parameter_list,
             this_mode,
@@ -109,7 +111,6 @@ impl Function {
     pub fn create_builtin(
         proto: Value,
         parameter_list: Vec<FormalParameter>,
-        body: FunctionBody,
         this_mode: ThisMode,
     ) -> Function {
         // Create length property and set it's value
@@ -122,7 +123,8 @@ impl Function {
         let mut func = Function {
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
-            body,
+            call_body: None,
+            construct_body: None,
             environment: None,
             params: parameter_list,
             this_mode,
@@ -135,6 +137,16 @@ impl Function {
 
         func.define_own_property(String::from("length"), length_property);
         func
+    }
+
+    // Set the call body of this function
+    pub fn set_call_body(&mut self, body: FunctionBody) {
+        self.call_body = Some(body);
+    }
+
+    // Set the construct body of this function
+    pub fn set_construct_body(&mut self, body: FunctionBody) {
+        self.construct_body = Some(body);
     }
 
     /// This will handle calls for both ordinary and built-in functions
@@ -179,9 +191,13 @@ impl Function {
 
         interpreter.realm.environment.push(local_env);
 
-        let result = match self.body {
-            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
-            FunctionBody::Ordinary(ref body) => interpreter.run(body),
+        // Call body should be set before reaching here
+        let result = match &self.call_body {
+            Some(func) => match func {
+                FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+                FunctionBody::Ordinary(ref body) => interpreter.run(body),
+            },
+            None => panic!("Function body expected"),
         };
 
         // local_env gets dropped here, its no longer needed
@@ -233,9 +249,13 @@ impl Function {
 
         interpreter.realm.environment.push(local_env);
 
-        let result = match self.body {
-            FunctionBody::BuiltIn(func) => func(&new_target, args_list, interpreter),
-            FunctionBody::Ordinary(ref body) => interpreter.run(body),
+        // Call body should be set before reaching here
+        let result = match &self.construct_body {
+            Some(func) => match func {
+                FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+                FunctionBody::Ordinary(ref body) => interpreter.run(body),
+            },
+            None => panic!("Function body expected"),
         };
 
         interpreter.realm.environment.pop();

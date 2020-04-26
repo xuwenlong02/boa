@@ -101,12 +101,10 @@ pub fn create_constructor(global: &Value) -> Value {
     let symbol_prototype = ValueData::new_obj(Some(&global));
 
     // Create Symbol constructor (or function in Symbol's case)
-    let symbol_constructor = Function::create_builtin(
-        symbol_prototype.clone(),
-        vec![],
-        FunctionBody::BuiltIn(call_symbol),
-        ThisMode::NonLexical,
-    );
+    let mut symbol_constructor =
+        Function::create_builtin(symbol_prototype.clone(), vec![], ThisMode::NonLexical);
+
+    symbol_constructor.set_call_body(FunctionBody::BuiltIn(call_symbol));
 
     // Symbol.prototype[[Prototype]] points to Object.prototype
     // Symbol Constructor -> Symbol Prototype -> Object Prototype
