@@ -279,6 +279,9 @@ impl ValueData {
                 // into_inner will consume the wrapped value and remove it from the hashmap
                 hash.into_inner()
             }
+
+            ValueData::FunctionObj(ref func) => func.clone(),
+
             // Accesing .object on borrow() seems to automatically dereference it, so we don't need the *
             Self::Function(ref func) => match func.clone().into_inner() {
                 Function::NativeFunc(ref func) => func.object.clone(),

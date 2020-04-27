@@ -98,19 +98,28 @@ pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue 
 /// [mdn]:
 pub fn create_constructor(global: &Value) -> Value {
     // Create prototype
-    let symbol_prototype = ValueData::new_obj(Some(&global));
+    let mut symbol_prototype = Object::default();
+
+    // Symbol.prototype[[Prototype]] points to Object.prototype
+    // Symbol Constructor -> Symbol Prototype -> Object Prototype
+    let object_prototype = global.get_field_slice("Object").get_field_slice(PROTOTYPE);
+    symbol_prototype.set_internal_slot(INSTANCE_PROTOTYPE, object_prototype);
+    symbol_prototype.set_method("toString", to_string);
+
+    let symbol_prototype_val = to_value(symbol_prototype);
 
     // Create Symbol constructor (or function in Symbol's case)
     let mut symbol_constructor =
-        Function::create_builtin(symbol_prototype.clone(), vec![], ThisMode::NonLexical);
+        Function::create_builtin(symbol_prototype_val.clone(), vec![], ThisMode::NonLexical);
 
     symbol_constructor.set_call_body(FunctionBody::BuiltIn(call_symbol));
+    symbol_constructor.set_construct_body(FunctionBody::BuiltIn(call_symbol));
 
     // Symbol.prototype[[Prototype]] points to Object.prototype
     // Symbol Constructor -> Symbol Prototype -> Object Prototype
 
     let symbol_constructor_value = to_value(symbol_constructor);
-    symbol_prototype.set_field_slice("constructor", symbol_constructor_value.clone());
+    symbol_prototype_val.set_field_slice("constructor", symbol_constructor_value.clone());
 
     symbol_constructor_value
 }

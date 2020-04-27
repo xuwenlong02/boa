@@ -41,6 +41,13 @@ pub enum FunctionBody {
     Ordinary(Node),
 }
 
+/// Signal what sort of function this is
+#[derive(Clone, Trace, Finalize)]
+pub enum FunctionKind {
+    BuiltIn,
+    Ordinary,
+}
+
 // This is indeed safe, but we need to mark this as an empty trace because
 // neither NativeFunctionData nor Node hold any GC'd objects, but Gc doesn't know that
 // So we need to signal it manually.
@@ -66,6 +73,8 @@ pub struct Function {
     pub params: Vec<FormalParameter>,
     /// This Mode
     pub this_mode: ThisMode,
+    /// Function kind
+    pub kind: FunctionKind,
     // Environment, built-in functions don't need Environments
     pub environment: Option<Environment>,
 }
@@ -94,6 +103,7 @@ impl Function {
             construct_body: None,
             environment: Some(scope),
             params: parameter_list,
+            kind: FunctionKind::Ordinary,
             this_mode,
         };
 
@@ -120,19 +130,23 @@ impl Function {
             .configurable(true)
             .value(to_value(parameter_list.len()));
 
-        let mut func = Function {
+        let mut func: Function = Function {
             internal_slots: Box::new(HashMap::new()),
             properties: Box::new(HashMap::new()),
             call_body: None,
             construct_body: None,
-            environment: None,
             params: parameter_list,
             this_mode,
+            kind: FunctionKind::BuiltIn,
+            environment: None,
         };
 
+        func.insert_property(
+            PROTOTYPE.to_owned(),
+            Property::default().value(proto.clone()),
+        );
+
         func.set_internal_slot("extensible", to_value(true));
-        // TODO: The below needs to be a property not internal slot
-        func.set_internal_slot(PROTOTYPE, to_value(proto.clone()));
         func.set_internal_slot("home_object", to_value(undefined()));
 
         func.define_own_property(String::from("length"), length_property);
@@ -159,6 +173,11 @@ impl Function {
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
+        // Is this a builtin function?
+        if let FunctionKind::BuiltIn = self.kind {
+            return self.call_builtin(this, args_list, interpreter);
+        };
+
         // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
         // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
         let local_env = new_function_environment(
@@ -203,6 +222,22 @@ impl Function {
         // local_env gets dropped here, its no longer needed
         interpreter.realm.environment.pop();
         result
+    }
+
+    /// Call a builtin function
+    fn call_builtin(
+        &self,
+        this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
+        args_list: &Vec<Value>,
+        interpreter: &mut Interpreter,
+    ) -> ResultValue {
+        match &self.call_body {
+            Some(func) => match func {
+                FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+                FunctionBody::Ordinary(_) => panic!("Ordinary function expected"),
+            },
+            None => panic!("Function body expected"),
+        }
     }
 
     /// This will handle calls for both ordinary and built-in functions
