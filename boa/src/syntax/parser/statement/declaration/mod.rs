@@ -13,9 +13,12 @@ mod lexical;
 mod tests;
 
 use self::{hoistable::HoistableDeclaration, lexical::LexicalDeclaration};
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Parses a declaration.

@@ -164,7 +164,7 @@ impl TokenParser for VariableDeclaration {
         interner: &mut Interner,
     ) -> Result<Self::Output, ParseError> {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        let name = if let TokenKind::Identifier(name) = &tok.kind {
+        let name = if let TokenKind::Identifier(name) = tok.kind {
             name.clone()
         } else {
             return Err(ParseError::expected(

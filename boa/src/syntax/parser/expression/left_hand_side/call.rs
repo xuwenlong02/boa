@@ -8,12 +8,15 @@
 //! [spec]: https://tc39.es/ecma262/#prod-CallExpression
 
 use super::arguments::Arguments;
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::Expression, AllowAwait, AllowYield, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Expression, AllowAwait, AllowYield, Cursor, ParseError, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a call expression.

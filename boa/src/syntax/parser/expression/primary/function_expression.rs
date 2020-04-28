@@ -7,12 +7,15 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/function
 //! [spec]: https://tc39.es/ecma262/#prod-FunctionExpression
 
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        function::{FormalParameters, FunctionBody},
-        Cursor, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            function::{FormalParameters, FunctionBody},
+            Cursor, ParseError, ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Function expression parsing.

@@ -18,9 +18,12 @@ use self::{
     object_initializer::ObjectLiteral,
 };
 use super::Expression;
-use crate::syntax::{
-    ast::{constant::Const, keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{constant::Const, keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 pub(in crate::syntax::parser) use object_initializer::Initializer;
 
@@ -58,7 +61,7 @@ impl TokenParser for PrimaryExpression {
     fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
 
-        match &tok.kind {
+        match tok.kind {
             TokenKind::Keyword(Keyword::This) => Ok(Node::This),
             // TokenKind::Keyword(Keyword::Arguments) => Ok(Node::new(NodeBase::Arguments, tok.pos)),
             TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor, interner),

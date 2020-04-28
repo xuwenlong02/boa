@@ -2,9 +2,14 @@
 mod tests;
 
 use super::block::Block;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
+    },
+    Interner,
 };
 
 /// Try...catch statement parsing

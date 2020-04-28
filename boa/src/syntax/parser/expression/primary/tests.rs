@@ -6,8 +6,8 @@ use crate::{
 #[test]
 fn check_string() {
     // Check empty string
-    check_parser("\"\"", &[Node::const_node("")]);
+    check_parser("\"\"", &[Node::const_node("")], int);
 
     // Check non-empty string
-    check_parser("\"hello\"", &[Node::const_node("hello")]);
+    check_parser("\"hello\"", &[Node::const_node("hello")], int);
 }

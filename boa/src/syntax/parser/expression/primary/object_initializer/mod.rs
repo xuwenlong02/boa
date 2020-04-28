@@ -10,17 +10,20 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{
-        node::{self, MethodDefinitionKind, Node},
-        punc::Punctuator,
-        token::{Token, TokenKind},
+use crate::{
+    syntax::{
+        ast::{
+            node::{self, MethodDefinitionKind, Node},
+            punc::Punctuator,
+            token::{Token, TokenKind},
+        },
+        parser::{
+            expression::AssignmentExpression,
+            function::{FormalParameters, FunctionBody},
+            AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
     },
-    parser::{
-        expression::AssignmentExpression,
-        function::{FormalParameters, FunctionBody},
-        AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
-    },
+    Interner,
 };
 
 /// Parses an object literal.

@@ -7,12 +7,15 @@
 //!
 //! [spec]: https://tc39.es/ecma262/#sec-let-and-const-declarations
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::Initializer, AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Initializer, AllowAwait, AllowIn, AllowYield, Cursor, ParseError,
+            ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a lexical declaration.

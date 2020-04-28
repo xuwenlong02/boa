@@ -118,7 +118,7 @@ impl error::Error for LexerError {
 
 /// A lexical analyzer for JavaScript source code
 #[derive(Debug)]
-pub struct Lexer<'a> {
+pub struct Lexer<'a, 'i> {
     /// The list of tokens generated so far.
     ///
     /// This field is public so you can use them once lexing has finished.
@@ -130,28 +130,17 @@ pub struct Lexer<'a> {
     /// The full Peekable buffer, an array of [Char]s
     buffer: Peekable<Chars<'a>>,
     /// String interner.
-    pub interner: Interner,
+    interner: &'i Interner,
 }
 
-impl<'a> Lexer<'a> {
+impl<'a, 'i> Lexer<'a, 'i> {
     /// Returns a Lexer with a buffer inside
     ///
     /// # Arguments
     ///
     /// * `buffer` - A string slice that holds the source code.
     /// The buffer needs to have a lifetime as long as the Lexer instance itself
-    pub fn new(buffer: &'a str) -> Lexer<'a> {
-        Lexer {
-            tokens: Vec::new(),
-            line_number: 1,
-            column_number: 0,
-            buffer: buffer.chars().peekable(),
-            interner: Interner::new(),
-        }
-    }
-
-    /// Creates a new lexer with the given interner.
-    pub fn new_with_interner(buffer: &'a str, interner: Interner) -> Self {
+    pub fn new(buffer: &'a str, interner: &'i mut Interner) -> Lexer<'a, 'i> {
         Self {
             tokens: Vec::new(),
             line_number: 1,

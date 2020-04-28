@@ -1,7 +1,10 @@
-use crate::syntax::{
-    ast::node::Node,
-    ast::op::{AssignOp, BinOp, BitOp, NumOp},
-    parser::tests::check_parser,
+use crate::{
+    syntax::{
+        ast::node::Node,
+        ast::op::{AssignOp, BinOp, BitOp, NumOp},
+        parser::tests::check_parser,
+    },
+    Interner,
 };
 
 /// Checks numeric operations
@@ -10,6 +13,7 @@ fn check_numeric_operations() {
     check_parser(
         "a + b",
         &[Node::bin_op(NumOp::Add, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a+1",
@@ -18,10 +22,12 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(1.0),
         )],
+        int,
     );
     check_parser(
         "a - b",
         &[Node::bin_op(NumOp::Sub, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a-1",
@@ -30,10 +36,12 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(1.0),
         )],
+        int,
     );
     check_parser(
         "a / b",
         &[Node::bin_op(NumOp::Div, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a/2",
@@ -42,10 +50,12 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(2.0),
         )],
+        int,
     );
     check_parser(
         "a * b",
         &[Node::bin_op(NumOp::Mul, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a*2",
@@ -54,10 +64,12 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(2.0),
         )],
+        int,
     );
     check_parser(
         "a ** b",
         &[Node::bin_op(NumOp::Exp, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a**2",
@@ -66,10 +78,12 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(2.0),
         )],
+        int,
     );
     check_parser(
         "a % b",
         &[Node::bin_op(NumOp::Mod, Node::local("a"), Node::local("b"))],
+        int,
     );
     check_parser(
         "a%2",
@@ -78,6 +92,7 @@ fn check_numeric_operations() {
             Node::local("a"),
             Node::const_node(2.0),
         )],
+        int,
     );
 }
 
@@ -99,6 +114,7 @@ fn check_complex_numeric_operations() {
             ),
             Node::const_node(1.0),
         )],
+        int,
     );
 }
 
@@ -112,6 +128,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a&b",
@@ -120,6 +137,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
 
     check_parser(
@@ -129,6 +147,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a|b",
@@ -137,6 +156,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
 
     check_parser(
@@ -146,6 +166,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a^b",
@@ -154,6 +175,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
 
     check_parser(
@@ -163,6 +185,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a<<b",
@@ -171,6 +194,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
 
     check_parser(
@@ -180,6 +204,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a>>b",
@@ -188,6 +213,7 @@ fn check_bitwise_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
 }
 
@@ -201,6 +227,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a -= b",
@@ -209,6 +236,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a *= b",
@@ -217,6 +245,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a **= b",
@@ -225,6 +254,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a /= b",
@@ -233,6 +263,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a %= b",
@@ -241,6 +272,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a &= b",
@@ -249,6 +281,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a |= b",
@@ -257,6 +290,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a ^= b",
@@ -265,6 +299,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a <<= b",
@@ -273,6 +308,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a >>= b",
@@ -281,6 +317,7 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::local("b"),
         )],
+        int,
     );
     check_parser(
         "a %= 10 / 2",
@@ -289,5 +326,6 @@ fn check_assign_operations() {
             Node::local("a"),
             Node::bin_op(NumOp::Div, Node::const_node(10.0), Node::const_node(2.0)),
         )],
+        int,
     );
 }

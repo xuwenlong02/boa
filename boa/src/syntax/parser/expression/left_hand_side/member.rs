@@ -6,12 +6,15 @@
 //! [spec]: https://tc39.es/ecma262/#prod-MemberExpression
 
 use super::arguments::Arguments;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::{primary::PrimaryExpression, Expression},
-        AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::{primary::PrimaryExpression, Expression},
+            AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a member expression.
@@ -58,7 +61,7 @@ impl TokenParser for MemberExpression {
             PrimaryExpression::new(self.allow_yield, self.allow_await).parse(cursor, interner)?
         };
         while let Some(tok) = cursor.peek(0) {
-            match &tok.kind {
+            match tok.kind {
                 TokenKind::Punctuator(Punctuator::Dot) => {
                     let _ = cursor.next().ok_or(ParseError::AbruptEnd)?; // We move the cursor forward.
                     match &cursor.next().ok_or(ParseError::AbruptEnd)?.kind {

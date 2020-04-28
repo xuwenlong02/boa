@@ -12,9 +12,12 @@ mod call;
 mod member;
 
 use self::{call::CallExpression, member::MemberExpression};
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Parses a left hand side expression.

@@ -1,9 +1,12 @@
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator},
-    parser::{
-        expression::Expression, statement::Statement, AllowAwait, AllowReturn, AllowYield, Cursor,
-        ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator},
+        parser::{
+            expression::Expression, statement::Statement, AllowAwait, AllowReturn, AllowYield,
+            Cursor, ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// While statement parsing

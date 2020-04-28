@@ -1,7 +1,10 @@
-use crate::syntax::{
-    ast::node::{FormalParameter, Node},
-    ast::op::NumOp,
-    parser::tests::check_parser,
+use crate::{
+    syntax::{
+        ast::node::{FormalParameter, Node},
+        ast::op::NumOp,
+        parser::tests::check_parser,
+    },
+    Interner,
 };
 
 /// Checks basic function declaration parsing.
@@ -27,6 +30,7 @@ fn check_basic_semicolon_insertion() {
             vec![FormalParameter::new("a", None, false)],
             Node::StatementList(vec![Node::return_node(Node::local("a"))]),
         )],
+        int,
     );
 }
 
@@ -53,6 +57,7 @@ fn check_empty_return_semicolon_insertion() {
             vec![FormalParameter::new("a", None, false)],
             Node::StatementList(vec![Node::Return(None)]),
         )],
+        int,
     );
 }
 
@@ -69,6 +74,7 @@ fn check_rest_operator() {
             ],
             Node::StatementList(Vec::new()),
         )],
+        int,
     );
 }
 
@@ -81,6 +87,7 @@ fn check_arrow_only_rest() {
             vec![FormalParameter::new("a", None, true)],
             Node::StatementList(Vec::new()),
         )],
+        int,
     );
 }
 
@@ -97,6 +104,7 @@ fn check_arrow_rest() {
             ],
             Node::StatementList(Vec::new()),
         )],
+        int,
     );
 }
 
@@ -135,6 +143,7 @@ fn check_arrow_semicolon_insertion() {
                 Node::local("b"),
             ))]),
         )],
+        int,
     );
 }
 
@@ -165,5 +174,6 @@ fn check_arrow_empty_return_semicolon_insertion() {
             ],
             Node::StatementList(vec![Node::Return(None)]),
         )],
+        int,
     );
 }

@@ -1,9 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{expression::Expression, AllowAwait, AllowYield, Cursor, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Expression, AllowAwait, AllowYield, Cursor, ParseResult, TokenParser,
+        },
+    },
+    Interner,
 };
 
 /// Return statement parsing

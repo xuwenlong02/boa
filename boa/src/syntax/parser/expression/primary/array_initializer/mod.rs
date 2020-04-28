@@ -10,12 +10,15 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{constant::Const, node::Node, punc::Punctuator},
-    parser::{
-        expression::AssignmentExpression, AllowAwait, AllowYield, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{constant::Const, node::Node, punc::Punctuator},
+        parser::{
+            expression::AssignmentExpression, AllowAwait, AllowYield, Cursor, ParseError,
+            ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses an array literal.

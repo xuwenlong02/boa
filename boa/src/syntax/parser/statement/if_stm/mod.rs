@@ -2,12 +2,15 @@
 mod tests;
 
 use super::Statement;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::Expression, AllowAwait, AllowReturn, AllowYield, Cursor, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Expression, AllowAwait, AllowReturn, AllowYield, Cursor, ParseResult,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// If statement parsing.

@@ -28,6 +28,7 @@ fn check_inline_block_semicolon_insertion() {
             Node::const_node(true),
             Node::Block(vec![Node::Break(None)]),
         )],
+        int,
     );
 }
 
@@ -41,6 +42,7 @@ fn check_new_line_semicolon_insertion() {
             Node::const_node(true),
             Node::Block(vec![Node::break_node("test")]),
         )],
+        int,
     );
 }
 
@@ -91,5 +93,6 @@ fn check_new_line_block_empty_semicolon_insertion() {
             Node::const_node(true),
             Node::Block(vec![Node::Break(None)]),
         )],
+        int,
     );
 }

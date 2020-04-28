@@ -1,6 +1,9 @@
-use crate::syntax::{
-    ast::node::{FormalParameter, MethodDefinitionKind, Node, PropertyDefinition},
-    parser::tests::check_parser,
+use crate::{
+    syntax::{
+        ast::node::{FormalParameter, MethodDefinitionKind, Node, PropertyDefinition},
+        parser::tests::check_parser,
+    },
+    Interner,
 };
 
 /// Checks object literal parsing.

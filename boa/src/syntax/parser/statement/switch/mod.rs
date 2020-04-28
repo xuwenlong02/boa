@@ -1,12 +1,15 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator},
-    parser::{
-        expression::Expression, AllowAwait, AllowReturn, AllowYield, Cursor, ParseError,
-        ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator},
+        parser::{
+            expression::Expression, AllowAwait, AllowReturn, AllowYield, Cursor, ParseError,
+            ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Switch statement parsing.

@@ -5,12 +5,15 @@
 //!
 //! [spec]: https://tc39.es/ecma262/#prod-HoistableDeclaration
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        function::FormalParameters, function::FunctionBody, AllowAwait, AllowDefault, AllowYield,
-        Cursor, ParseError, ParseResult, TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            function::FormalParameters, function::FunctionBody, AllowAwait, AllowDefault,
+            AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Hoistable declaration parsing.
@@ -90,7 +93,7 @@ impl TokenParser for FunctionDeclaration {
         cursor.expect(Keyword::Function, "function declaration", interner)?;
 
         let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        let name = if let TokenKind::Identifier(name) = &token.kind {
+        let name = if let TokenKind::Identifier(name) = token.kind {
             name.clone()
         } else {
             return Err(ParseError::Expected(

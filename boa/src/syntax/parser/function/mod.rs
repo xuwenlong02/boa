@@ -10,13 +10,18 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{
-        node::{self, Node},
-        punc::Punctuator,
-        token::TokenKind,
+use crate::{
+    syntax::{
+        ast::{
+            node::{self, Node},
+            punc::Punctuator,
+            token::TokenKind,
+        },
+        parser::{
+            statement::StatementList, AllowAwait, AllowYield, Cursor, ParseError, TokenParser,
+        },
     },
-    parser::{statement::StatementList, AllowAwait, AllowYield, Cursor, ParseError, TokenParser},
+    Interner,
 };
 
 /// Formal parameters parsing.
@@ -135,7 +140,7 @@ impl TokenParser for FunctionRestParameter {
     ) -> Result<Self::Output, ParseError> {
         let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
         Ok(Self::Output::new(
-            if let TokenKind::Identifier(name) = &token.kind {
+            if let TokenKind::Identifier(name) = token.kind {
                 name
             } else {
                 return Err(ParseError::Expected(
@@ -187,7 +192,7 @@ impl TokenParser for FormalParameter {
         interner: &mut Interner,
     ) -> Result<Self::Output, ParseError> {
         let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        let name = if let TokenKind::Identifier(name) = &token.kind {
+        let name = if let TokenKind::Identifier(name) = token.kind {
             name
         } else {
             return Err(ParseError::Expected(

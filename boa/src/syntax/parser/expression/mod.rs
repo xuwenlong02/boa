@@ -18,7 +18,10 @@ mod update;
 use self::assignment::ExponentiationExpression;
 pub(super) use self::{assignment::AssignmentExpression, primary::Initializer};
 use super::{AllowAwait, AllowIn, AllowYield, Cursor, ParseResult, TokenParser};
-use crate::{Interner, syntax::ast::{node::Node, punc::Punctuator, token::TokenKind}};
+use crate::{
+    syntax::ast::{node::Node, punc::Punctuator, token::TokenKind},
+    Interner,
+};
 
 /// Generates an expression parser.
 ///

@@ -1,7 +1,10 @@
-use crate::syntax::{
-    ast::node::Node,
-    ast::op::{AssignOp, BinOp, CompOp, UnaryOp},
-    parser::tests::check_parser,
+use crate::{
+    syntax::{
+        ast::node::Node,
+        ast::op::{AssignOp, BinOp, CompOp, UnaryOp},
+        parser::tests::check_parser,
+    },
+    Interner,
 };
 
 /// Checks do-while statement parsing.

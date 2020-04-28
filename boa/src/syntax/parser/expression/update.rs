@@ -6,9 +6,12 @@
 //! [spec]: https://tc39.es/ecma262/#sec-update-expressions
 
 use super::left_hand_side::LeftHandSideExpression;
-use crate::syntax::{
-    ast::{node::Node, op::UnaryOp, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{node::Node, op::UnaryOp, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Parses an update expression.

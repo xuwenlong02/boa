@@ -7,18 +7,21 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Arithmetic_Operators#Exponentiation
 //! [spec]: https://tc39.es/ecma262/#sec-exp-operator
 
-use crate::syntax::{
-    ast::{
-        keyword::Keyword,
-        node::Node,
-        op::{BinOp, NumOp},
-        punc::Punctuator,
-        token::TokenKind,
+use crate::{
+    syntax::{
+        ast::{
+            keyword::Keyword,
+            node::Node,
+            op::{BinOp, NumOp},
+            punc::Punctuator,
+            token::TokenKind,
+        },
+        parser::{
+            expression::{unary::UnaryExpression, update::UpdateExpression},
+            AllowAwait, AllowYield, Cursor, ParseResult, TokenParser,
+        },
     },
-    parser::{
-        expression::{unary::UnaryExpression, update::UpdateExpression},
-        AllowAwait, AllowYield, Cursor, ParseResult, TokenParser,
-    },
+    Interner,
 };
 
 /// Parses an exponentiation expression.

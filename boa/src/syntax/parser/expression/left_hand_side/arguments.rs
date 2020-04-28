@@ -7,11 +7,15 @@
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Glossary/Argument
 //! [spec]: https://tc39.es/ecma262/#prod-Arguments
 
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::AssignmentExpression, AllowAwait, AllowYield, Cursor, ParseError, TokenParser,
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::AssignmentExpression, AllowAwait, AllowYield, Cursor, ParseError,
+            TokenParser,
+        },
     },
+    Interner,
 };
 
 /// Parses a list of arguments.

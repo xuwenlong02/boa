@@ -1,6 +1,9 @@
-use crate::syntax::{
-    ast::node::Node,
-    parser::tests::{check_invalid, check_parser},
+use crate::{
+    syntax::{
+        ast::node::Node,
+        parser::tests::{check_invalid, check_parser},
+    },
+    Interner,
 };
 
 /// Checks `var` declaration parsing.

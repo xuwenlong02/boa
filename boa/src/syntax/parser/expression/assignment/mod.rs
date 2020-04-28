@@ -12,9 +12,12 @@ mod conditional;
 mod exponentiation;
 
 use self::{arrow_function::ArrowFunction, conditional::ConditionalExpression};
-use crate::syntax::{
-    ast::{node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 pub(super) use exponentiation::ExponentiationExpression;
 

@@ -10,9 +10,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{AllowAwait, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+    },
+    Interner,
 };
 
 /// Break statement parsing
@@ -61,7 +64,7 @@ impl TokenParser for BreakStatement {
         }
 
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
-        let node = if let TokenKind::Identifier(name) = &tok.kind {
+        let node = if let TokenKind::Identifier(name) = tok.kind {
             Node::break_node(name)
         } else {
             return Err(ParseError::Expected(
