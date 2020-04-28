@@ -75,7 +75,7 @@ impl TokenParser for ContinueStatement {
             ));
         };
 
-        cursor.expect_semicolon(false, "continue statement")?;
+        cursor.expect_semicolon(false, "continue statement", interner)?;
 
         Ok(node)
     }

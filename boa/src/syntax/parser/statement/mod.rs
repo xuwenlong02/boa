@@ -328,7 +328,7 @@ impl TokenParser for ExpressionStatement {
         let expr =
             Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect_semicolon(false, "expression statement")?;
+        cursor.expect_semicolon(false, "expression statement", interner)?;
 
         Ok(expr)
     }

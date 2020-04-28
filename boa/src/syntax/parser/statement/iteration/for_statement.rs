@@ -96,6 +96,7 @@ impl TokenParser for ForStatement {
             cursor.expect(
                 TokenKind::Punctuator(Punctuator::CloseParen),
                 "for statement",
+                interner,
             )?;
             Some(step)
         };

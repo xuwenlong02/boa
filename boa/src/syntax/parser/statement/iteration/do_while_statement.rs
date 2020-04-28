@@ -79,7 +79,7 @@ impl TokenParser for DoWhileStatement {
             Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
         cursor.expect(Punctuator::CloseParen, "do while statement", interner)?;
-        cursor.expect_semicolon(true, "do while statement")?;
+        cursor.expect_semicolon(true, "do while statement", interner)?;
 
         Ok(Node::do_while_loop(body, cond))
     }

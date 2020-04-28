@@ -75,7 +75,7 @@ impl TokenParser for BreakStatement {
             ));
         };
 
-        cursor.expect_semicolon(false, "break statement")?;
+        cursor.expect_semicolon(false, "break statement", interner)?;
 
         Ok(node)
     }

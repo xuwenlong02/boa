@@ -45,7 +45,7 @@ impl TokenParser for ThrowStatement {
     fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         cursor.expect(Keyword::Throw, "throw statement", interner)?;
 
-        cursor.peek_expect_no_lineterminator(0, "throw statement")?;
+        cursor.peek_expect_no_lineterminator(0, "throw statement", interner)?;
 
         let expr =
             Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;

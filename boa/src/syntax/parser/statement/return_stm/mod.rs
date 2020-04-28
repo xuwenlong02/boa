@@ -62,7 +62,7 @@ impl TokenParser for ReturnStatement {
         let expr =
             Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect_semicolon(false, "return statement")?;
+        cursor.expect_semicolon(false, "return statement", interner)?;
 
         Ok(Node::return_node(expr))
     }

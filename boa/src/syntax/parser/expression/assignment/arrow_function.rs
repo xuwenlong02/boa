@@ -86,7 +86,7 @@ impl TokenParser for ArrowFunction {
                 ))
             }
         };
-        cursor.peek_expect_no_lineterminator(0, "arrow function")?;
+        cursor.peek_expect_no_lineterminator(0, "arrow function", interner)?;
 
         cursor.expect(Punctuator::Arrow, "arrow function", interner)?;
 
