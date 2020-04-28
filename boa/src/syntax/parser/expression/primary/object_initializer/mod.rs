@@ -54,7 +54,7 @@ impl ObjectLiteral {
 impl TokenParser for ObjectLiteral {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -62,8 +62,10 @@ impl TokenParser for ObjectLiteral {
                 break;
             }
 
-            elements
-                .push(PropertyDefinition::new(self.allow_yield, self.allow_await).parse(cursor)?);
+            elements.push(
+                PropertyDefinition::new(self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)?,
+            );
 
             if cursor.next_if(Punctuator::CloseBlock).is_some() {
                 break;
@@ -115,10 +117,14 @@ impl PropertyDefinition {
 impl TokenParser for PropertyDefinition {
     type Output = node::PropertyDefinition;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         if cursor.next_if(Punctuator::Spread).is_some() {
             let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                .parse(cursor)?;
+                .parse(cursor, interner)?;
             return Ok(node::PropertyDefinition::SpreadObject(node));
         }
 
@@ -128,7 +134,7 @@ impl TokenParser for PropertyDefinition {
             .ok_or(ParseError::AbruptEnd)?;
         if cursor.next_if(Punctuator::Colon).is_some() {
             let val = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                .parse(cursor)?;
+                .parse(cursor, interner)?;
             return Ok(node::PropertyDefinition::Property(prop_name, val));
         }
 
@@ -138,7 +144,7 @@ impl TokenParser for PropertyDefinition {
             || ["get", "set"].contains(&prop_name.as_str())
         {
             return MethodDefinition::new(self.allow_yield, self.allow_await, prop_name)
-                .parse(cursor);
+                .parse(cursor, interner);
         }
 
         let pos = cursor
@@ -184,7 +190,11 @@ impl MethodDefinition {
 impl TokenParser for MethodDefinition {
     type Output = node::PropertyDefinition;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let (methodkind, prop_name, params) = match self.identifier.as_str() {
             idn @ "get" | idn @ "set" => {
                 let prop_name = cursor
@@ -196,8 +206,8 @@ impl TokenParser for MethodDefinition {
                     "property method definition",
                 )?;
                 let first_param = cursor.peek(0).expect("current token disappeared").clone();
-                let params = FormalParameters::new(false, false).parse(cursor)?;
-                cursor.expect(Punctuator::CloseParen, "method definition")?;
+                let params = FormalParameters::new(false, false).parse(cursor, interner)?;
+                cursor.expect(Punctuator::CloseParen, "method definition", interner)?;
                 if idn == "get" {
                     if !params.is_empty() {
                         return Err(ParseError::Unexpected(
@@ -217,8 +227,8 @@ impl TokenParser for MethodDefinition {
                 }
             }
             prop_name => {
-                let params = FormalParameters::new(false, false).parse(cursor)?;
-                cursor.expect(Punctuator::CloseParen, "method definition")?;
+                let params = FormalParameters::new(false, false).parse(cursor, interner)?;
+                cursor.expect(Punctuator::CloseParen, "method definition", interner)?;
                 (
                     MethodDefinitionKind::Ordinary,
                     prop_name.to_string(),
@@ -232,7 +242,7 @@ impl TokenParser for MethodDefinition {
             "property method definition",
         )?;
         let body = FunctionBody::new(false, false)
-            .parse(cursor)
+            .parse(cursor, interner)
             .map(Node::StatementList)?;
         cursor.expect(
             TokenKind::Punctuator(Punctuator::CloseBlock),
@@ -283,8 +293,13 @@ impl Initializer {
 impl TokenParser for Initializer {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(TokenKind::Punctuator(Punctuator::Assign), "initializer")?;
-        AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await).parse(cursor)
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(
+            TokenKind::Punctuator(Punctuator::Assign),
+            "initializer",
+            interner,
+        )?;
+        AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await)
+            .parse(cursor, interner)
     }
 }

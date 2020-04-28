@@ -72,18 +72,20 @@ impl ExponentiationExpression {
 impl TokenParser for ExponentiationExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         if Self::is_unary_expression(cursor) {
-            return UnaryExpression::new(self.allow_yield, self.allow_await).parse(cursor);
+            return UnaryExpression::new(self.allow_yield, self.allow_await)
+                .parse(cursor, interner);
         }
 
-        let lhs = UpdateExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
+        let lhs =
+            UpdateExpression::new(self.allow_yield, self.allow_await).parse(cursor, interner)?;
         if let Some(tok) = cursor.next() {
             if let TokenKind::Punctuator(Punctuator::Exp) = tok.kind {
                 return Ok(Node::bin_op(
                     BinOp::Num(NumOp::Exp),
                     lhs,
-                    self.parse(cursor)?,
+                    self.parse(cursor, interner)?,
                 ));
             } else {
                 cursor.back();

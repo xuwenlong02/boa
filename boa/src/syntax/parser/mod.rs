@@ -9,7 +9,10 @@ mod statement;
 mod tests;
 
 use self::error::{ParseError, ParseResult};
-use crate::syntax::ast::{node::Node, token::Token};
+use crate::{
+    syntax::ast::{node::Node, token::Token},
+    Interner,
+};
 use cursor::Cursor;
 
 /// Trait implemented by parsers.
@@ -22,14 +25,18 @@ trait TokenParser: Sized {
     /// Parses the token stream using the current parser.
     ///
     /// This method needs to be provided by the implementor type.
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError>;
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError>;
 
     /// Tries to parse the following tokens with this parser.
     ///
     /// It will return the cursor to the initial position if an error occurs during parsing.
-    fn try_parse(self, cursor: &mut Cursor<'_>) -> Option<Self::Output> {
+    fn try_parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> Option<Self::Output> {
         let initial_pos = cursor.pos();
-        if let Ok(node) = self.parse(cursor) {
+        if let Ok(node) = self.parse(cursor, interner) {
             Some(node)
         } else {
             cursor.seek(initial_pos);
@@ -92,19 +99,24 @@ impl From<bool> for AllowDefault {
 pub struct Parser<'a> {
     /// Cursor in the parser, the internal structure used to read tokens.
     cursor: Cursor<'a>,
+    /// String interner for the parser.
+    interner: Interner,
 }
 
 impl<'a> Parser<'a> {
     /// Create a new parser, using `tokens` as input
-    pub fn new(tokens: &'a [Token]) -> Self {
+    pub fn new(tokens: &'a [Token], interner: Interner) -> Self {
         Self {
             cursor: Cursor::new(tokens),
+            interner,
         }
     }
 
     /// Parse all expressions in the token array
     pub fn parse_all(&mut self) -> ParseResult {
-        Script.parse(&mut self.cursor).map(Node::StatementList)
+        Script
+            .parse(&mut self.cursor, &mut self.interner)
+            .map(Node::StatementList)
     }
 }
 
@@ -120,9 +132,13 @@ pub struct Script;
 impl TokenParser for Script {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         if cursor.peek(0).is_some() {
-            ScriptBody.parse(cursor)
+            ScriptBody.parse(cursor, interner)
         } else {
             Ok(Vec::new())
         }
@@ -141,7 +157,11 @@ pub struct ScriptBody;
 impl TokenParser for ScriptBody {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
-        self::statement::StatementList::new(false, false, false, false).parse(cursor)
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
+        self::statement::StatementList::new(false, false, false, false).parse(cursor, interner)
     }
 }

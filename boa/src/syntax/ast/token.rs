@@ -6,6 +6,7 @@
 //! [spec]: https://tc39.es/ecma262/#sec-tokens
 
 use crate::syntax::ast::{keyword::Keyword, pos::Position, punc::Punctuator};
+use crate::{Interner, Sym};
 use std::fmt::{Debug, Display, Formatter, Result};
 
 #[cfg(feature = "serde-ast")]
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-tokens
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token {
     /// The token kind, which contains the actual data of the token.
     pub kind: TokenKind,
@@ -35,30 +36,33 @@ impl Token {
             pos: Position::new(line_number, column_number),
         }
     }
-}
 
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.kind)
+    /// Creates an object with the `fmt::Display` implementation for this token.
+    pub fn display<'f>(self, interner: &'f Interner) -> TokenKindDisplay<'f> {
+        TokenKindDisplay {
+            kind: self.kind,
+            interner,
+        }
     }
 }
 
 /// A continuous sequence of tokens.
 pub struct VecToken(Vec<Token>);
+// pub struct VecToken(Vec<Token>);
 
-impl Debug for VecToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let mut buffer = String::new();
-        for token in &self.0 {
-            buffer.push_str(&token.to_string());
-        }
-        write!(f, "{}", buffer)
-    }
-}
+// impl Debug for VecToken {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+//         let mut buffer = String::new();
+//         for token in &self.0 {
+//             buffer.push_str(&token.to_string());
+//         }
+//         write!(f, "{}", buffer)
+//     }
+// }
 
 /// Represents the type of Token and the data it has inside.
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenKind {
     /// A boolean literal, which is either `true` or `false`.
     BooleanLiteral(bool),
@@ -67,7 +71,7 @@ pub enum TokenKind {
     EOF,
 
     /// An identifier.
-    Identifier(String),
+    Identifier(Sym),
 
     /// A keyword.
     ///
@@ -86,10 +90,10 @@ pub enum TokenKind {
     Punctuator(Punctuator),
 
     /// A string literal.
-    StringLiteral(String),
+    StringLiteral(Sym),
 
     /// A regular expression, consisting of body and flags.
-    RegularExpressionLiteral(String, String),
+    RegularExpressionLiteral(Sym, Sym),
 
     /// Indicates the end of a line (`\n`).
     LineTerminator,
@@ -125,11 +129,8 @@ impl TokenKind {
     }
 
     /// Creates an `Identifier` token type.
-    pub fn identifier<I>(ident: I) -> Self
-    where
-        I: Into<String>,
-    {
-        Self::Identifier(ident.into())
+    pub fn identifier(ident: Sym) -> Self {
+        Self::Identifier(ident)
     }
 
     /// Creates a `Keyword` token kind.
@@ -148,41 +149,70 @@ impl TokenKind {
     }
 
     /// Creates a `StringLiteral` token type.
-    pub fn string_literal<S>(lit: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self::StringLiteral(lit.into())
+    pub fn string_literal(lit: Sym) -> Self {
+        Self::StringLiteral(lit)
     }
 
     /// Creates a `RegularExpressionLiteral` token kind.
-    pub fn regular_expression_literal<B, F>(body: B, flags: F) -> Self
-    where
-        B: Into<String>,
-        F: Into<String>,
-    {
-        Self::RegularExpressionLiteral(body.into(), flags.into())
+    pub fn regular_expression_literal(body: Sym, flags: Sym) -> Self {
+        Self::RegularExpressionLiteral(body, flags)
     }
 
     /// Creates a `LineTerminator` token kind.
     pub fn line_terminator() -> Self {
         Self::LineTerminator
     }
+
+    /// Creates an object with the `fmt::Display` implementation for this token kind.
+    pub fn display<'f>(self, interner: &'f Interner) -> TokenKindDisplay<'f> {
+        TokenKindDisplay {
+            kind: self,
+            interner,
+        }
+    }
 }
 
-impl Display for TokenKind {
+/// Structure implementing the `fmt::Display` trait for a `TokenKind`.
+#[derive(Debug)]
+pub struct TokenKindDisplay<'i> {
+    kind: TokenKind,
+    interner: &'i Interner,
+}
+
+impl Display for TokenKindDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match *self {
-            Self::BooleanLiteral(ref val) => write!(f, "{}", val),
-            Self::EOF => write!(f, "end of file"),
-            Self::Identifier(ref ident) => write!(f, "{}", ident),
-            Self::Keyword(ref word) => write!(f, "{}", word),
-            Self::NullLiteral => write!(f, "null"),
-            Self::NumericLiteral(ref num) => write!(f, "{}", num),
-            Self::Punctuator(ref punc) => write!(f, "{}", punc),
-            Self::StringLiteral(ref lit) => write!(f, "{}", lit),
-            Self::RegularExpressionLiteral(ref body, ref flags) => write!(f, "/{}/{}", body, flags),
-            Self::LineTerminator => write!(f, "line terminator"),
+        match self.kind {
+            TokenKind::BooleanLiteral(ref val) => write!(f, "{}", val),
+            TokenKind::EOF => write!(f, "end of file"),
+            TokenKind::Identifier(ident) => write!(
+                f,
+                "{}",
+                self.interner
+                    .resolve(ident)
+                    .expect("identifier string not found")
+            ),
+            TokenKind::Keyword(ref word) => write!(f, "{}", word),
+            TokenKind::NullLiteral => write!(f, "null"),
+            TokenKind::NumericLiteral(ref num) => write!(f, "{}", num),
+            TokenKind::Punctuator(ref punc) => write!(f, "{}", punc),
+            TokenKind::StringLiteral(lit) => write!(
+                f,
+                "{}",
+                self.interner
+                    .resolve(lit)
+                    .expect("could not find string literal string")
+            ),
+            TokenKind::RegularExpressionLiteral(body, flags) => write!(
+                f,
+                "/{}/{}",
+                self.interner
+                    .resolve(body)
+                    .expect("could not find regular expression body string"),
+                self.interner
+                    .resolve(flags)
+                    .expect("could not find regular expression flags string")
+            ),
+            TokenKind::LineTerminator => write!(f, "line terminator"),
         }
     }
 }

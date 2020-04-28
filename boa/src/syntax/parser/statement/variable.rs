@@ -1,10 +1,13 @@
 // use super::lexical_declaration_continuation;
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{
-        expression::Initializer, AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult,
-        TokenParser,
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            expression::Initializer, AllowAwait, AllowIn, AllowYield, Cursor, ParseError,
+            ParseResult, TokenParser,
+        },
     },
+    Interner, Sym,
 };
 
 /// Variable statement parsing.
@@ -40,13 +43,13 @@ impl VariableStatement {
 impl TokenParser for VariableStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Var, "variable statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Var, "variable statement", interner)?;
 
-        let decl_list =
-            VariableDeclarationList::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let decl_list = VariableDeclarationList::new(true, self.allow_yield, self.allow_await)
+            .parse(cursor, interner)?;
 
-        cursor.expect_semicolon(false, "variable statement")?;
+        cursor.expect_semicolon(false, "variable statement", interner)?;
 
         Ok(decl_list)
     }
@@ -90,13 +93,13 @@ impl VariableDeclarationList {
 impl TokenParser for VariableDeclarationList {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut list = Vec::new();
 
         loop {
             list.push(
                 VariableDeclaration::new(self.allow_in, self.allow_yield, self.allow_await)
-                    .parse(cursor)?,
+                    .parse(cursor, interner)?,
             );
 
             match cursor.peek_semicolon(false) {
@@ -104,16 +107,18 @@ impl TokenParser for VariableDeclarationList {
                 (false, Some(tk)) if tk.kind == TokenKind::Punctuator(Punctuator::Comma) => {
                     let _ = cursor.next();
                 }
-                _ => {
-                    return Err(ParseError::Expected(
+                (false, Some(tk)) => {
+                    return Err(ParseError::expected(
                         vec![
-                            TokenKind::Punctuator(Punctuator::Semicolon),
-                            TokenKind::LineTerminator,
+                            Punctuator::Semicolon.to_string(),
+                            Punctuator::Comma.to_string(),
                         ],
-                        cursor.next().ok_or(ParseError::AbruptEnd)?.clone(),
+                        tk.display(interner).to_string(),
+                        tk.pos,
                         "lexical declaration",
                     ))
                 }
+                _ => unreachable!(),
             }
         }
 
@@ -151,16 +156,21 @@ impl VariableDeclaration {
 }
 
 impl TokenParser for VariableDeclaration {
-    type Output = (String, Option<Node>);
+    type Output = (Sym, Option<Node>);
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
         let name = if let TokenKind::Identifier(name) = &tok.kind {
             name.clone()
         } else {
-            return Err(ParseError::Expected(
-                vec![TokenKind::identifier("identifier")],
-                tok.clone(),
+            return Err(ParseError::expected(
+                vec![String::from("identifier")],
+                tok.display(interner).to_string(),
+                tok.pos,
                 "variable declaration",
             ));
         };
@@ -170,7 +180,7 @@ impl TokenParser for VariableDeclaration {
                 name,
                 Some(
                     Initializer::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ),
             )),
             _ => Ok((name, None)),

@@ -66,7 +66,7 @@ impl AssignmentExpression {
 impl TokenParser for AssignmentExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // Arrow function
         let next_token = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
         match next_token.kind {
@@ -83,7 +83,7 @@ impl TokenParser for AssignmentExpression {
                             self.allow_yield,
                             self.allow_await,
                         )
-                        .parse(cursor);
+                        .parse(cursor, interner);
                     }
                 }
             }
@@ -100,16 +100,16 @@ impl TokenParser for AssignmentExpression {
         }
 
         let mut lhs = ConditionalExpression::new(self.allow_in, self.allow_yield, self.allow_await)
-            .parse(cursor)?;
+            .parse(cursor, interner)?;
         // let mut lhs = self.read_block()?;
 
         if let Some(tok) = cursor.next() {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Assign) => {
-                    lhs = Node::assign(lhs, self.parse(cursor)?)
+                    lhs = Node::assign(lhs, self.parse(cursor, interner)?)
                 }
                 TokenKind::Punctuator(p) if p.as_binop().is_some() => {
-                    let expr = self.parse(cursor)?;
+                    let expr = self.parse(cursor, interner)?;
                     let binop = p.as_binop().expect("binop disappeared");
                     lhs = Node::bin_op(binop, lhs, expr);
                 }

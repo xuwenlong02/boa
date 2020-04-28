@@ -58,13 +58,13 @@ impl ArrowFunction {
 impl TokenParser for ArrowFunction {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
         let params = match &next_token.kind {
             TokenKind::Punctuator(Punctuator::OpenParen) => {
-                let params =
-                    FormalParameters::new(self.allow_yield, self.allow_await).parse(cursor)?;
-                cursor.expect(Punctuator::CloseParen, "arrow function")?;
+                let params = FormalParameters::new(self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)?;
+                cursor.expect(Punctuator::CloseParen, "arrow function", interner)?;
                 params
             }
             TokenKind::Identifier(param_name) => vec![FormalParameter {
@@ -76,7 +76,7 @@ impl TokenParser for ArrowFunction {
                 return Err(ParseError::Expected(
                     vec![
                         TokenKind::Punctuator(Punctuator::OpenParen),
-                        TokenKind::identifier("identifier"),
+                        String::from("identifier"),
                     ],
                     next_token.clone(),
                     "arrow function",
@@ -85,9 +85,9 @@ impl TokenParser for ArrowFunction {
         };
         cursor.peek_expect_no_lineterminator(0, "arrow function")?;
 
-        cursor.expect(Punctuator::Arrow, "arrow function")?;
+        cursor.expect(Punctuator::Arrow, "arrow function", interner)?;
 
-        let body = ConciseBody::new(self.allow_in).parse(cursor)?;
+        let body = ConciseBody::new(self.allow_in).parse(cursor, interner)?;
 
         Ok(Node::arrow_function_decl(params, body))
     }
@@ -114,18 +114,22 @@ impl ConciseBody {
 impl TokenParser for ConciseBody {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         match cursor.peek(0).ok_or(ParseError::AbruptEnd)?.kind {
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
                 let _ = cursor.next();
                 let body = FunctionBody::new(false, false)
-                    .parse(cursor)
+                    .parse(cursor, interner)
                     .map(Node::StatementList)?;
-                cursor.expect(Punctuator::CloseBlock, "arrow function")?;
+                cursor.expect(Punctuator::CloseBlock, "arrow function", interner)?;
                 Ok(body)
             }
             _ => Ok(Node::return_node(
-                ExpressionBody::new(self.allow_in, false).parse(cursor)?,
+                ExpressionBody::new(self.allow_in, false).parse(cursor, interner)?,
             )),
         }
     }
@@ -155,7 +159,7 @@ impl ExpressionBody {
 impl TokenParser for ExpressionBody {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        AssignmentExpression::new(self.allow_in, false, self.allow_await).parse(cursor)
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        AssignmentExpression::new(self.allow_in, false, self.allow_await).parse(cursor, interner)
     }
 }

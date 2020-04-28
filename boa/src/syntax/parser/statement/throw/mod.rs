@@ -37,12 +37,13 @@ impl ThrowStatement {
 impl TokenParser for ThrowStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Throw, "throw statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Throw, "throw statement", interner)?;
 
         cursor.peek_expect_no_lineterminator(0, "throw statement")?;
 
-        let expr = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let expr =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
         if let Some(tok) = cursor.peek(0) {
             if tok.kind == TokenKind::Punctuator(Punctuator::Semicolon) {
                 let _ = cursor.next();

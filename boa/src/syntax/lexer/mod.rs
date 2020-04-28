@@ -6,9 +6,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::syntax::ast::{
-    punc::Punctuator,
-    token::{Token, TokenKind},
+use crate::{
+    syntax::ast::{
+        punc::Punctuator,
+        token::{Token, TokenKind},
+    },
+    Interner,
 };
 use std::{
     char::{decode_utf16, from_u32},
@@ -126,6 +129,8 @@ pub struct Lexer<'a> {
     column_number: u64,
     /// The full Peekable buffer, an array of [Char]s
     buffer: Peekable<Chars<'a>>,
+    /// String interner.
+    pub interner: Interner,
 }
 
 impl<'a> Lexer<'a> {
@@ -141,6 +146,18 @@ impl<'a> Lexer<'a> {
             line_number: 1,
             column_number: 0,
             buffer: buffer.chars().peekable(),
+            interner: Interner::new(),
+        }
+    }
+
+    /// Creates a new lexer with the given interner.
+    pub fn new_with_interner(buffer: &'a str, interner: Interner) -> Self {
+        Self {
+            tokens: Vec::new(),
+            line_number: 1,
+            column_number: 0,
+            buffer: buffer.chars().peekable(),
+            interner,
         }
     }
 
@@ -377,7 +394,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     let str_length = buf.len() as u64;
-                    self.push_token(TokenKind::StringLiteral(buf));
+                    self.push_token(TokenKind::StringLiteral(self.interner.get_or_intern(buf)));
                     // Why +1? Quotation marks are not included,
                     // So technically it would be +2, (for both " ") but we want to be 1 less
                     // to compensate for the incrementing at the top
@@ -512,7 +529,7 @@ impl<'a> Lexer<'a> {
                             if let Ok(keyword) = FromStr::from_str(slice) {
                                 TokenKind::Keyword(keyword)
                             } else {
-                                TokenKind::identifier(slice)
+                                TokenKind::identifier(self.interner.get_or_intern(slice))
                             }
                         }
                     });
@@ -627,7 +644,7 @@ impl<'a> Lexer<'a> {
                                     // body was parsed, now look for flags
                                     let flags = self.take_char_while(char::is_alphabetic)?;
                                     self.push_token(TokenKind::RegularExpressionLiteral(
-                                        body, flags,
+                                        self.interner.get_or_intern(body), self.interner.get_or_intern(flags),
                                     ));
                                 } else {
                                     // failed to parse regex, restore original buffer position and

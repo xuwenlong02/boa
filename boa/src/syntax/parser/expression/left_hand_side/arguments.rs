@@ -45,8 +45,12 @@ impl Arguments {
 impl TokenParser for Arguments {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Vec<Node>, ParseError> {
-        cursor.expect(Punctuator::OpenParen, "arguments")?;
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Vec<Node>, ParseError> {
+        cursor.expect(Punctuator::OpenParen, "arguments", interner)?;
         let mut args = Vec::new();
         loop {
             let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
@@ -80,12 +84,12 @@ impl TokenParser for Arguments {
             if cursor.next_if(Punctuator::Spread).is_some() {
                 args.push(Node::spread(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             } else {
                 args.push(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 );
             }
         }

@@ -37,8 +37,8 @@ impl ReturnStatement {
 impl TokenParser for ReturnStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Return, "return statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Return, "return statement", interner)?;
 
         if let (true, tok) = cursor.peek_semicolon(false) {
             match tok {
@@ -54,7 +54,8 @@ impl TokenParser for ReturnStatement {
             return Ok(Node::Return(None));
         }
 
-        let expr = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let expr =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
         cursor.expect_semicolon(false, "return statement")?;
 

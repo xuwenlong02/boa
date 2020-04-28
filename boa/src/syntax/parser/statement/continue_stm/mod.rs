@@ -46,8 +46,8 @@ impl ContinueStatement {
 impl TokenParser for ContinueStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Continue, "continue statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Continue, "continue statement", interner)?;
 
         if let (true, tok) = cursor.peek_semicolon(false) {
             match tok {
@@ -65,8 +65,9 @@ impl TokenParser for ContinueStatement {
             Node::continue_node(name)
         } else {
             return Err(ParseError::Expected(
-                vec![TokenKind::identifier("identifier")],
-                tok.clone(),
+                vec![String::from("identifier")],
+                tok.display(interner).to_string(),
+                tok.pos,
                 "continue statement",
             ));
         };

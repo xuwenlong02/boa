@@ -47,10 +47,11 @@ impl CallExpression {
 impl TokenParser for CallExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut lhs = match cursor.peek(0) {
             Some(tk) if tk.kind == TokenKind::Punctuator(Punctuator::OpenParen) => {
-                let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
+                let args =
+                    Arguments::new(self.allow_yield, self.allow_await).parse(cursor, interner)?;
                 Node::call(self.first_member_expr, args)
             }
             _ => {
@@ -66,7 +67,8 @@ impl TokenParser for CallExpression {
         while let Some(tok) = cursor.peek(0) {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::OpenParen) => {
-                    let args = Arguments::new(self.allow_yield, self.allow_await).parse(cursor)?;
+                    let args = Arguments::new(self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?;
                     lhs = Node::call(lhs, args);
                 }
                 TokenKind::Punctuator(Punctuator::Dot) => {
@@ -80,8 +82,9 @@ impl TokenParser for CallExpression {
                         }
                         _ => {
                             return Err(ParseError::Expected(
-                                vec![TokenKind::identifier("identifier")],
-                                tok.clone(),
+                                vec![String::from("identifier")],
+                                tok.display(interner).to_string(),
+                                tok.pos,
                                 "call expression",
                             ));
                         }
@@ -89,9 +92,9 @@ impl TokenParser for CallExpression {
                 }
                 TokenKind::Punctuator(Punctuator::OpenBracket) => {
                     let _ = cursor.next().ok_or(ParseError::AbruptEnd)?; // We move the cursor.
-                    let idx =
-                        Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
-                    cursor.expect(Punctuator::CloseBracket, "call expression")?;
+                    let idx = Expression::new(true, self.allow_yield, self.allow_await)
+                        .parse(cursor, interner)?;
+                    cursor.expect(Punctuator::CloseBracket, "call expression", interner)?;
                     lhs = Node::get_field(lhs, idx);
                 }
                 _ => break,

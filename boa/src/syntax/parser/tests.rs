@@ -1,26 +1,33 @@
 //! Tests for the parser.
 
 use super::Parser;
-use crate::syntax::{ast::node::Node, ast::op::NumOp, lexer::Lexer};
+use crate::{
+    syntax::{ast::node::Node, ast::op::NumOp, lexer::Lexer},
+    Interner,
+};
 
+/// Checks that the given string parses to the given list of nodes.
 #[allow(clippy::result_unwrap_used)]
-pub(super) fn check_parser(js: &str, expr: &[Node]) {
-    let mut lexer = Lexer::new(js);
+pub(super) fn check_parser(js: &str, expr: &[Node], interner: Interner) {
+    let mut lexer = Lexer::new_with_interner(js, interner);
     lexer.lex().expect("failed to lex");
 
     assert_eq!(
-        Parser::new(&lexer.tokens)
+        Parser::new(&lexer.tokens, lexer.interner)
             .parse_all()
             .expect("failed to parse"),
         Node::statement_list(expr)
     );
 }
 
+/// Checks that the given string failes to parse.
 pub(super) fn check_invalid(js: &str) {
     let mut lexer = Lexer::new(js);
     lexer.lex().expect("failed to lex");
 
-    assert!(Parser::new(&lexer.tokens).parse_all().is_err());
+    assert!(Parser::new(&lexer.tokens, lexer.interner)
+        .parse_all()
+        .is_err());
 }
 
 /// Should be parsed as `new Class().method()` instead of `new (Class().method())`

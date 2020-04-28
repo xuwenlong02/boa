@@ -40,7 +40,7 @@ impl UpdateExpression {
 impl TokenParser for UpdateExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
         match tok.kind {
             TokenKind::Punctuator(Punctuator::Inc) => {
@@ -48,7 +48,7 @@ impl TokenParser for UpdateExpression {
                 return Ok(Node::unary_op(
                     UnaryOp::IncrementPre,
                     LeftHandSideExpression::new(self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             }
             TokenKind::Punctuator(Punctuator::Dec) => {
@@ -56,13 +56,14 @@ impl TokenParser for UpdateExpression {
                 return Ok(Node::unary_op(
                     UnaryOp::DecrementPre,
                     LeftHandSideExpression::new(self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 ));
             }
             _ => {}
         }
 
-        let lhs = LeftHandSideExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
+        let lhs = LeftHandSideExpression::new(self.allow_yield, self.allow_await)
+            .parse(cursor, interner)?;
         if let Some(tok) = cursor.peek(0) {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Inc) => {

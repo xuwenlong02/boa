@@ -7,7 +7,9 @@
 //! [spec]: https://tc39.es/ecma262/#sec-primary-expression-literals
 //! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Grammar_and_types#Literals
 
-use gc_derive::{Finalize, Trace};
+use crate::{Interner, Sym};
+use gc::{Finalize, Trace};
+use gc_derive::Finalize;
 use std::fmt::{Display, Formatter, Result};
 
 #[cfg(feature = "serde-ast")]
@@ -24,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// [spec]: https://tc39.es/ecma262/#sec-primary-expression-literals
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Grammar_and_types#Literals
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, Trace, Finalize, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Finalize)]
 pub enum Const {
     /// A string literal is zero or more characters enclosed in double (`"`) or single (`'`) quotation marks.
     ///
@@ -39,7 +41,7 @@ pub enum Const {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-terms-and-definitions-string-value
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Grammar_and_types#String_literals
-    String(String),
+    String(Sym),
 
     /// A floating-point number literal.
     ///
@@ -101,20 +103,18 @@ pub enum Const {
     Undefined,
 }
 
-impl From<&str> for Const {
-    fn from(s: &str) -> Self {
-        Const::String(s.into())
+impl Const {
+    /// Creates a structure implementing the `fmt::Display` trait for a `Const`.
+    pub fn display<'f>(self, interner: &'f Interner) -> ConstDisplay<'f> {
+        ConstDisplay {
+            val: self,
+            interner,
+        }
     }
 }
 
-impl From<&String> for Const {
-    fn from(s: &String) -> Self {
-        Const::String(s.clone())
-    }
-}
-
-impl From<String> for Const {
-    fn from(s: String) -> Self {
+impl From<Sym> for Const {
+    fn from(s: Sym) -> Self {
         Const::String(s)
     }
 }
@@ -137,15 +137,39 @@ impl From<bool> for Const {
     }
 }
 
-impl Display for Const {
+unsafe impl Trace for Const {
+    #[inline]
+    unsafe fn trace(&self) {}
+    #[inline]
+    unsafe fn root(&self) {}
+    #[inline]
+    unsafe fn unroot(&self) {}
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self)
+    }
+}
+
+/// Structure giving the `fmt::Display` trait to a `Const`.
+#[derive(Debug)]
+struct ConstDisplay<'d> {
+    val: Const,
+    interner: &'d Interner,
+}
+
+impl Display for ConstDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match *self {
-            Self::String(ref st) => write!(f, "\"{}\"", st),
-            Self::Num(num) => write!(f, "{}", num),
-            Self::Int(num) => write!(f, "{}", num),
-            Self::Bool(v) => write!(f, "{}", v),
-            Self::Null => write!(f, "null"),
-            Self::Undefined => write!(f, "undefined"),
+        match self.val {
+            Const::String(st) => write!(
+                f,
+                "\"{}\"",
+                self.interner.resolve(st).expect("string disappeared")
+            ),
+            Const::Num(num) => write!(f, "{}", num),
+            Const::Int(num) => write!(f, "{}", num),
+            Const::Bool(v) => write!(f, "{}", v),
+            Const::Null => write!(f, "null"),
+            Const::Undefined => write!(f, "undefined"),
         }
     }
 }

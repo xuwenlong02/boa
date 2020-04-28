@@ -18,7 +18,7 @@ mod update;
 use self::assignment::ExponentiationExpression;
 pub(super) use self::{assignment::AssignmentExpression, primary::Initializer};
 use super::{AllowAwait, AllowIn, AllowYield, Cursor, ParseResult, TokenParser};
-use crate::syntax::ast::{node::Node, punc::Punctuator, token::TokenKind};
+use crate::{Interner, syntax::ast::{node::Node, punc::Punctuator, token::TokenKind}};
 
 /// Generates an expression parser.
 ///
@@ -31,8 +31,8 @@ macro_rules! expression { ($name:ident, $lower:ident, [$( $op:path ),*], [$( $lo
     impl TokenParser for $name {
         type Output = Node;
 
-        fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-            let mut lhs = $lower::new($( self.$low_param ),*).parse(cursor)?;
+        fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+            let mut lhs = $lower::new($( self.$low_param ),*).parse(cursor, interner)?;
             while let Some(tok) = cursor.peek(0) {
                 match tok.kind {
                     TokenKind::Punctuator(op) if $( op == $op )||* => {
@@ -40,7 +40,7 @@ macro_rules! expression { ($name:ident, $lower:ident, [$( $op:path ),*], [$( $lo
                         lhs = Node::bin_op(
                             op.as_binop().expect("could not get binary operation"),
                             lhs,
-                            $lower::new($( self.$low_param ),*).parse(cursor)?
+                            $lower::new($( self.$low_param ),*).parse(cursor, interner)?
                         )
                     }
                     _ => break

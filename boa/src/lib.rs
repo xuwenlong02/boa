@@ -44,6 +44,12 @@ use crate::{
     realm::Realm,
     syntax::{ast::node::Node, lexer::Lexer, parser::Parser},
 };
+use gc::{Finalize, Trace};
+use gc_derive::Finalize;
+#[cfg(feature = "serde-ast")]
+use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
+use string_interner::{StringInterner, Symbol};
 
 #[cfg(feature = "serde-ast")]
 pub use serde_json;
@@ -52,7 +58,7 @@ fn parser_expr(src: &str) -> Result<Node, String> {
     let mut lexer = Lexer::new(src);
     lexer.lex().map_err(|e| format!("SyntaxError: {}", e))?;
     let tokens = lexer.tokens;
-    Parser::new(&tokens)
+    Parser::new(&tokens, lexer.interner)
         .parse_all()
         .map_err(|e| format!("ParsingError: {}", e))
 }
@@ -95,4 +101,51 @@ pub fn exec(src: &str) -> String {
     let realm = Realm::create();
     let mut engine: Interpreter = Executor::new(realm);
     forward(&mut engine, src)
+}
+
+/// Internal type for the string interner.
+type Interner = StringInterner<Sym>;
+
+/// Symbol used for the internal string interner.
+#[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Finalize)]
+struct Sym {
+    val: NonZeroUsize,
+}
+
+impl Symbol for Sym {
+    /// Creates an `Sym` from the given `usize`.
+    ///
+    /// # Panics
+    ///
+    /// If the given `usize` is `usize::MAX`.
+    fn from_usize(val: usize) -> Self {
+        assert!(
+            val != usize::max_value(),
+            "symbol value {} is too large and not supported by `Sym` type",
+            val
+        );
+        Self {
+            val: NonZeroUsize::new(val + 1).expect(
+                "should never fail because `val + 1` is nonzero and `<= usize::max_value()`",
+            ),
+        }
+    }
+
+    fn to_usize(self) -> usize {
+        self.val.get() - 1
+    }
+}
+
+unsafe impl Trace for Sym {
+    #[inline]
+    unsafe fn trace(&self) {}
+    #[inline]
+    unsafe fn root(&self) {}
+    #[inline]
+    unsafe fn unroot(&self) {}
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self)
+    }
 }

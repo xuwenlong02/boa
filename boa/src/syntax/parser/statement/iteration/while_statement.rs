@@ -44,16 +44,17 @@ impl WhileStatement {
 impl TokenParser for WhileStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::While, "while statement")?;
-        cursor.expect(Punctuator::OpenParen, "while statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::While, "while statement", interner)?;
+        cursor.expect(Punctuator::OpenParen, "while statement", interner)?;
 
-        let cond = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let cond =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "while statement")?;
+        cursor.expect(Punctuator::CloseParen, "while statement", interner)?;
 
-        let body =
-            Statement::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?;
+        let body = Statement::new(self.allow_yield, self.allow_await, self.allow_return)
+            .parse(cursor, interner)?;
 
         Ok(Node::while_loop(cond, body))
     }

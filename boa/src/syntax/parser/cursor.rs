@@ -1,9 +1,12 @@
 //! Cursor implementation for the parser.
 
 use super::ParseError;
-use crate::syntax::ast::{
-    punc::Punctuator,
-    token::{Token, TokenKind},
+use crate::{
+    syntax::ast::{
+        punc::Punctuator,
+        token::{Token, TokenKind},
+    },
+    Interner,
 };
 
 /// Token cursor.
@@ -39,9 +42,9 @@ impl<'a> Cursor<'a> {
     }
 
     /// Moves the cursor to the next token and returns the token.
-    pub(super) fn next(&mut self) -> Option<&'a Token> {
+    pub(super) fn next(&mut self) -> Option<Token> {
         loop {
-            let token = self.tokens.get(self.pos);
+            let token = self.tokens.get(self.pos).copied();
             if let Some(tk) = token {
                 self.pos += 1;
 
@@ -55,11 +58,11 @@ impl<'a> Cursor<'a> {
     }
 
     /// Peeks the next token without moving the cursor.
-    pub(super) fn peek(&self, skip: usize) -> Option<&'a Token> {
+    pub(super) fn peek(&self, skip: usize) -> Option<Token> {
         let mut count = 0;
         let mut skipped = 0;
         loop {
-            let token = self.tokens.get(self.pos + count);
+            let token = self.tokens.get(self.pos + count).copied();
             count += 1;
 
             if let Some(tk) = token {
@@ -97,15 +100,15 @@ impl<'a> Cursor<'a> {
     }
 
     /// Peeks the previous token without moving the cursor.
-    pub(super) fn peek_prev(&self) -> Option<&'a Token> {
+    pub(super) fn peek_prev(&self) -> Option<Token> {
         if self.pos == 0 {
             None
         } else {
             let mut back = 1;
-            let mut tok = self.tokens.get(self.pos - back).expect("token disappeared");
+            let mut tok = self.tokens[self.pos - back];
             while self.pos >= back && tok.kind == TokenKind::LineTerminator {
                 back += 1;
-                tok = self.tokens.get(self.pos - back).expect("token disappeared");
+                tok = self.tokens[self.pos - back];
             }
 
             if back == self.pos {
@@ -119,7 +122,12 @@ impl<'a> Cursor<'a> {
     /// Returns an error if the next token is not of kind `kind`.
     ///
     /// Note: it will consume the next token.
-    pub(super) fn expect<K>(&mut self, kind: K, routine: &'static str) -> Result<(), ParseError>
+    pub(super) fn expect<K>(
+        &mut self,
+        kind: K,
+        routine: &'static str,
+        interner: &Interner,
+    ) -> Result<(), ParseError>
     where
         K: Into<TokenKind>,
     {
@@ -129,9 +137,10 @@ impl<'a> Cursor<'a> {
         if next_token.kind == kind {
             Ok(())
         } else {
-            Err(ParseError::Expected(
-                vec![kind],
-                next_token.clone(),
+            Err(ParseError::expected(
+                vec![kind.display(interner).to_string()],
+                next_token.display(interner).to_string(),
+                next_token.pos,
                 routine,
             ))
         }
@@ -142,8 +151,8 @@ impl<'a> Cursor<'a> {
     /// It will automatically insert a semicolon if needed, as specified in the [spec][spec].
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-automatic-semicolon-insertion
-    pub(super) fn peek_semicolon(&self, do_while: bool) -> (bool, Option<&Token>) {
-        match self.tokens.get(self.pos) {
+    pub(super) fn peek_semicolon(&self, do_while: bool) -> (bool, Option<Token>) {
+        match self.tokens.get(self.pos).copied() {
             Some(tk) => match tk.kind {
                 TokenKind::Punctuator(Punctuator::Semicolon) => (true, Some(tk)),
                 TokenKind::LineTerminator | TokenKind::Punctuator(Punctuator::CloseBlock) => {
@@ -156,10 +165,7 @@ impl<'a> Cursor<'a> {
                             "cannot be finishing a do-while if we are at the beginning"
                         );
 
-                        let tok = self
-                            .tokens
-                            .get(self.pos - 1)
-                            .expect("could not find previous token");
+                        let tok = self.tokens[self.pos - 1];
                         if tok.kind == TokenKind::Punctuator(Punctuator::CloseParen) {
                             return (true, Some(tk));
                         }
@@ -181,6 +187,7 @@ impl<'a> Cursor<'a> {
         &mut self,
         do_while: bool,
         routine: &'static str,
+        interner: &Interner,
     ) -> Result<(), ParseError> {
         match self.peek_semicolon(do_while) {
             (true, Some(tk)) => match tk.kind {
@@ -191,9 +198,10 @@ impl<'a> Cursor<'a> {
                 _ => Ok(()),
             },
             (true, None) => Ok(()),
-            (false, Some(tk)) => Err(ParseError::Expected(
-                vec![TokenKind::Punctuator(Punctuator::Semicolon)],
-                tk.clone(),
+            (false, Some(tk)) => Err(ParseError::expected(
+                vec![Punctuator::Semicolon.to_string()],
+                tk.display(interner).to_string(),
+                tk.pos,
                 routine,
             )),
             (false, None) => unreachable!(),
@@ -207,6 +215,7 @@ impl<'a> Cursor<'a> {
         &mut self,
         skip: usize,
         routine: &'static str,
+        interner: &Interner,
     ) -> Result<(), ParseError> {
         let mut count = 0;
         let mut skipped = 0;
@@ -215,7 +224,11 @@ impl<'a> Cursor<'a> {
             count += 1;
             if let Some(tk) = token {
                 if skipped == skip && tk.kind == TokenKind::LineTerminator {
-                    break Err(ParseError::Unexpected(tk.clone(), Some(routine)));
+                    break Err(ParseError::unexpected(
+                        tk.display(interner).to_string(),
+                        tk.pos,
+                        routine,
+                    ));
                 } else if skipped == skip && tk.kind != TokenKind::LineTerminator {
                     break Ok(());
                 } else if tk.kind != TokenKind::LineTerminator {
@@ -231,7 +244,7 @@ impl<'a> Cursor<'a> {
     ///
     /// When the next token is a `kind` token, get the token, otherwise return `None`. This
     /// function skips line terminators.
-    pub(super) fn next_if<K>(&mut self, kind: K) -> Option<&'a Token>
+    pub(super) fn next_if<K>(&mut self, kind: K) -> Option<Token>
     where
         K: Into<TokenKind>,
     {

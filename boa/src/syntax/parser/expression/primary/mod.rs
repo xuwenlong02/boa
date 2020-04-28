@@ -55,24 +55,24 @@ impl PrimaryExpression {
 impl TokenParser for PrimaryExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
 
         match &tok.kind {
             TokenKind::Keyword(Keyword::This) => Ok(Node::This),
             // TokenKind::Keyword(Keyword::Arguments) => Ok(Node::new(NodeBase::Arguments, tok.pos)),
-            TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor),
+            TokenKind::Keyword(Keyword::Function) => FunctionExpression.parse(cursor, interner),
             TokenKind::Punctuator(Punctuator::OpenParen) => {
-                let expr =
-                    Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
-                cursor.expect(Punctuator::CloseParen, "primary expression")?;
+                let expr = Expression::new(true, self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)?;
+                cursor.expect(Punctuator::CloseParen, "primary expression", interner)?;
                 Ok(expr)
             }
             TokenKind::Punctuator(Punctuator::OpenBracket) => {
-                ArrayLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+                ArrayLiteral::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
-                ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor)
+                ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(*boolean)),
             // TODO: ADD TokenKind::UndefinedLiteral
@@ -86,7 +86,8 @@ impl TokenParser for PrimaryExpression {
                 vec![Node::const_node(body), Node::const_node(flags)],
             ))),
             _ => Err(ParseError::Unexpected(
-                tok.clone(),
+                tok.display(interner).to_string(),
+                tok.pos,
                 Some("primary expression"),
             )),
         }

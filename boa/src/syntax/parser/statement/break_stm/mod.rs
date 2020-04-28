@@ -46,8 +46,8 @@ impl BreakStatement {
 impl TokenParser for BreakStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Break, "break statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Break, "break statement", interner)?;
 
         if let (true, tok) = cursor.peek_semicolon(false) {
             match tok {
@@ -65,8 +65,9 @@ impl TokenParser for BreakStatement {
             Node::break_node(name)
         } else {
             return Err(ParseError::Expected(
-                vec![TokenKind::identifier("identifier")],
-                tok.clone(),
+                vec![String::from("identifier")],
+                tok.display(interner).to_string(),
+                tok.pos,
                 "break statement",
             ));
         };

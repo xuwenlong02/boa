@@ -53,11 +53,11 @@ impl DoWhileStatement {
 impl TokenParser for DoWhileStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Do, "do while statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Do, "do while statement", interner)?;
 
-        let body =
-            Statement::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?;
+        let body = Statement::new(self.allow_yield, self.allow_await, self.allow_return)
+            .parse(cursor, interner)?;
 
         let next_token = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
@@ -69,12 +69,13 @@ impl TokenParser for DoWhileStatement {
             ));
         }
 
-        cursor.expect(Keyword::While, "do while statement")?;
-        cursor.expect(Punctuator::OpenParen, "do while statement")?;
+        cursor.expect(Keyword::While, "do while statement", interner)?;
+        cursor.expect(Punctuator::OpenParen, "do while statement", interner)?;
 
-        let cond = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let cond =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "do while statement")?;
+        cursor.expect(Punctuator::CloseParen, "do while statement", interner)?;
         cursor.expect_semicolon(true, "do while statement")?;
 
         Ok(Node::do_while_loop(body, cond))

@@ -46,21 +46,22 @@ impl IfStatement {
 impl TokenParser for IfStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::If, "if statement")?;
-        cursor.expect(Punctuator::OpenParen, "if statement")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::If, "if statement", interner)?;
+        cursor.expect(Punctuator::OpenParen, "if statement", interner)?;
 
-        let cond = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let cond =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "if statement")?;
+        cursor.expect(Punctuator::CloseParen, "if statement", interner)?;
 
-        let then_stm =
-            Statement::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)?;
+        let then_stm = Statement::new(self.allow_yield, self.allow_await, self.allow_return)
+            .parse(cursor, interner)?;
 
         let else_stm = match cursor.next() {
             Some(else_tok) if else_tok.kind == TokenKind::Keyword(Keyword::Else) => Some(
                 Statement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)?,
+                    .parse(cursor, interner)?,
             ),
             _ => {
                 cursor.back();

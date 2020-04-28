@@ -46,15 +46,17 @@ impl Declaration {
 impl TokenParser for Declaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::Function) => {
-                HoistableDeclaration::new(self.allow_yield, self.allow_await, false).parse(cursor)
+                HoistableDeclaration::new(self.allow_yield, self.allow_await, false)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Const) | TokenKind::Keyword(Keyword::Let) => {
-                LexicalDeclaration::new(true, self.allow_yield, self.allow_await).parse(cursor)
+                LexicalDeclaration::new(true, self.allow_yield, self.allow_await)
+                    .parse(cursor, interner)
             }
             _ => unreachable!("unknown token found"),
         }

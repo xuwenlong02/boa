@@ -45,10 +45,10 @@ impl HoistableDeclaration {
 impl TokenParser for HoistableDeclaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TODO: check for generators and async functions + generators
         FunctionDeclaration::new(self.allow_yield, self.allow_await, self.allow_default)
-            .parse(cursor)
+            .parse(cursor, interner)
     }
 }
 
@@ -86,8 +86,8 @@ impl FunctionDeclaration {
 impl TokenParser for FunctionDeclaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Keyword::Function, "function declaration")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Keyword::Function, "function declaration", interner)?;
 
         let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
         let name = if let TokenKind::Identifier(name) = &token.kind {
@@ -100,18 +100,18 @@ impl TokenParser for FunctionDeclaration {
             ));
         };
 
-        cursor.expect(Punctuator::OpenParen, "function declaration")?;
+        cursor.expect(Punctuator::OpenParen, "function declaration", interner)?;
 
-        let params = FormalParameters::new(false, false).parse(cursor)?;
+        let params = FormalParameters::new(false, false).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "function declaration")?;
-        cursor.expect(Punctuator::OpenBlock, "function declaration")?;
+        cursor.expect(Punctuator::CloseParen, "function declaration", interner)?;
+        cursor.expect(Punctuator::OpenBlock, "function declaration", interner)?;
 
         let body = FunctionBody::new(self.allow_yield, self.allow_await)
-            .parse(cursor)
+            .parse(cursor, interner)
             .map(Node::StatementList)?;
 
-        cursor.expect(Punctuator::CloseBlock, "function declaration")?;
+        cursor.expect(Punctuator::CloseBlock, "function declaration", interner)?;
 
         Ok(Node::function_decl(name, params, body))
     }

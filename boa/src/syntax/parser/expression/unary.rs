@@ -46,33 +46,37 @@ impl UnaryExpression {
 impl TokenParser for UnaryExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
         match tok.kind {
-            TokenKind::Keyword(Keyword::Delete) => {
-                Ok(Node::unary_op(UnaryOp::Delete, self.parse(cursor)?))
-            }
+            TokenKind::Keyword(Keyword::Delete) => Ok(Node::unary_op(
+                UnaryOp::Delete,
+                self.parse(cursor, interner)?,
+            )),
             TokenKind::Keyword(Keyword::Void) => {
-                Ok(Node::unary_op(UnaryOp::Void, self.parse(cursor)?))
+                Ok(Node::unary_op(UnaryOp::Void, self.parse(cursor, interner)?))
             }
-            TokenKind::Keyword(Keyword::TypeOf) => {
-                Ok(Node::unary_op(UnaryOp::TypeOf, self.parse(cursor)?))
-            }
+            TokenKind::Keyword(Keyword::TypeOf) => Ok(Node::unary_op(
+                UnaryOp::TypeOf,
+                self.parse(cursor, interner)?,
+            )),
             TokenKind::Punctuator(Punctuator::Add) => {
-                Ok(Node::unary_op(UnaryOp::Plus, self.parse(cursor)?))
+                Ok(Node::unary_op(UnaryOp::Plus, self.parse(cursor, interner)?))
             }
-            TokenKind::Punctuator(Punctuator::Sub) => {
-                Ok(Node::unary_op(UnaryOp::Minus, self.parse(cursor)?))
-            }
-            TokenKind::Punctuator(Punctuator::Neg) => {
-                Ok(Node::unary_op(UnaryOp::Tilde, self.parse(cursor)?))
-            }
+            TokenKind::Punctuator(Punctuator::Sub) => Ok(Node::unary_op(
+                UnaryOp::Minus,
+                self.parse(cursor, interner)?,
+            )),
+            TokenKind::Punctuator(Punctuator::Neg) => Ok(Node::unary_op(
+                UnaryOp::Tilde,
+                self.parse(cursor, interner)?,
+            )),
             TokenKind::Punctuator(Punctuator::Not) => {
-                Ok(Node::unary_op(UnaryOp::Not, self.parse(cursor)?))
+                Ok(Node::unary_op(UnaryOp::Not, self.parse(cursor, interner)?))
             }
             _ => {
                 cursor.back();
-                UpdateExpression::new(self.allow_yield, self.allow_await).parse(cursor)
+                UpdateExpression::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
         }
     }

@@ -29,7 +29,7 @@ pub(super) struct FunctionExpression;
 impl TokenParser for FunctionExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let name = if let TokenKind::Identifier(name) =
             &cursor.peek(0).ok_or(ParseError::AbruptEnd)?.kind
         {
@@ -42,18 +42,18 @@ impl TokenParser for FunctionExpression {
             let _ = cursor.next().expect("nex token disappeared");
         }
 
-        cursor.expect(Punctuator::OpenParen, "function expression")?;
+        cursor.expect(Punctuator::OpenParen, "function expression", interner)?;
 
-        let params = FormalParameters::new(false, false).parse(cursor)?;
+        let params = FormalParameters::new(false, false).parse(cursor, interner)?;
 
-        cursor.expect(Punctuator::CloseParen, "function expression")?;
-        cursor.expect(Punctuator::OpenBlock, "function expression")?;
+        cursor.expect(Punctuator::CloseParen, "function expression", interner)?;
+        cursor.expect(Punctuator::OpenBlock, "function expression", interner)?;
 
         let body = FunctionBody::new(false, false)
-            .parse(cursor)
+            .parse(cursor, interner)
             .map(Node::StatementList)?;
 
-        cursor.expect(Punctuator::CloseBlock, "function expression")?;
+        cursor.expect(Punctuator::CloseBlock, "function expression", interner)?;
 
         Ok(Node::function_decl::<_, &String, _, _>(name, params, body))
     }

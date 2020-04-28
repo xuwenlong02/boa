@@ -53,21 +53,21 @@ impl ConditionalExpression {
 impl TokenParser for ConditionalExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TODO: coalesce expression
         let lhs = LogicalORExpression::new(self.allow_in, self.allow_yield, self.allow_await)
-            .parse(cursor)?;
+            .parse(cursor, interner)?;
 
         if let Some(tok) = cursor.next() {
             if tok.kind == TokenKind::Punctuator(Punctuator::Question) {
                 let then_clause =
                     AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .parse(cursor)?;
-                cursor.expect(Punctuator::Colon, "conditional expression")?;
+                        .parse(cursor, interner)?;
+                cursor.expect(Punctuator::Colon, "conditional expression", interner)?;
 
                 let else_clause =
                     AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .parse(cursor)?;
+                        .parse(cursor, interner)?;
                 return Ok(Node::conditional_op(lhs, then_clause, else_clause));
             } else {
                 cursor.back();

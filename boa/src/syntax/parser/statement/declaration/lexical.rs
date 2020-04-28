@@ -47,17 +47,17 @@ impl LexicalDeclaration {
 impl TokenParser for LexicalDeclaration {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::Const) => {
                 BindingList::new(self.allow_in, self.allow_yield, self.allow_await, true)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Let) => {
                 BindingList::new(self.allow_in, self.allow_yield, self.allow_await, false)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             _ => unreachable!("unknown token found"),
         }
@@ -98,7 +98,7 @@ impl BindingList {
 impl TokenParser for BindingList {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // Create vectors to store the variable declarations
         // Const and Let signatures are slightly different, Const needs definitions, Lets don't
         let mut let_decls = Vec::new();
@@ -110,7 +110,7 @@ impl TokenParser for BindingList {
                 name.clone()
             } else {
                 return Err(ParseError::Expected(
-                    vec![TokenKind::identifier("identifier")],
+                    vec![String::from("identifier")],
                     token.clone(),
                     if self.is_const {
                         "const declaration"
@@ -124,7 +124,7 @@ impl TokenParser for BindingList {
                 Some(token) if token.kind == TokenKind::Punctuator(Punctuator::Assign) => {
                     let init = Some(
                         Initializer::new(self.allow_in, self.allow_yield, self.allow_await)
-                            .parse(cursor)?,
+                            .parse(cursor, interner)?,
                     );
                     if self.is_const {
                         const_decls.push((name, init.unwrap()));

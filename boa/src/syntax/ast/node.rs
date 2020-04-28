@@ -1,9 +1,13 @@
 //! This module implements the `Node` structure, which composes the AST.
 
-use crate::syntax::ast::{
-    constant::Const,
-    op::{BinOp, Operator, UnaryOp},
+use crate::{
+    syntax::ast::{
+        constant::Const,
+        op::{BinOp, Operator, UnaryOp},
+    },
+    Interner, Sym,
 };
+use gc::{Finalize, Trace};
 use gc_derive::{Finalize, Trace};
 use std::fmt;
 
@@ -90,7 +94,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-BreakStatement
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/break
-    Break(Option<String>),
+    Break(Option<Sym>),
 
     /// Calling the function actually performs the specified actions with the indicated parameters.
     ///
@@ -148,7 +152,7 @@ pub enum Node {
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/const
     /// [identifier]: https://developer.mozilla.org/en-US/docs/Glossary/identifier
     /// [expression]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Expressions_and_Operators#Expressions
-    ConstDecl(Vec<(String, Node)>),
+    ConstDecl(Vec<(Sym, Node)>),
 
     /// The `continue` statement terminates execution of the statements in the current iteration of the current or labeled loop,
     /// and continues execution of the loop with the next iteration.
@@ -162,7 +166,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-ContinueStatement
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/continue
-    Continue(Option<String>),
+    Continue(Option<Sym>),
 
     /// The `do...while` statement creates a loop that executes a specified statement until the test condition evaluates to false.
     ///
@@ -190,7 +194,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-terms-and-definitions-function
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function
-    FunctionDecl(Option<String>, Vec<FormalParameter>, Box<Node>),
+    FunctionDecl(Option<Sym>, Vec<FormalParameter>, Box<Node>),
 
     /// This property accessor provides access to an object's properties by using the [dot notation][mdn].
     ///
@@ -211,7 +215,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-property-accessors
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Property_accessors#Dot_notation
-    GetConstField(Box<Node>, String),
+    GetConstField(Box<Node>, Sym),
 
     /// This property accessor provides access to an object's properties by using the [bracket notation][mdn].
     ///
@@ -282,7 +286,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-let-and-const-declarations
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/let
-    LetDecl(Vec<(String, Option<Node>)>),
+    LetDecl(Vec<(Sym, Option<Node>)>),
 
     /// An `identifier` is a sequence of characters in the code that identifies a variable, function, or property.
     ///
@@ -297,7 +301,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-Identifier
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Glossary/Identifier
-    Local(String),
+    Local(Sym),
 
     /// The `new` operator lets developers create an instance of a user-defined object type or of one of the built-in object types that has a constructor function.
     ///
@@ -478,7 +482,7 @@ pub enum Node {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-VariableStatement
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/var
-    VarDecl(Vec<(String, Option<Node>)>),
+    VarDecl(Vec<(Sym, Option<Node>)>),
 
     /// The `while` statement creates a loop that executes a specified statement as long as the test condition evaluates to `true`.
     ///
@@ -519,12 +523,6 @@ impl Operator for Node {
             Self::Assign(_, _) => 17,
             _ => 19,
         }
-    }
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.display(f, 0)
     }
 }
 
@@ -574,12 +572,11 @@ impl Node {
     }
 
     /// Creates a `Break` AST node.
-    pub fn break_node<OL, L>(label: OL) -> Self
+    pub fn break_node<OL>(label: OL) -> Self
     where
-        L: Into<String>,
-        OL: Into<Option<L>>,
+        OL: Into<Option<Sym>>,
     {
-        Self::Break(label.into().map(L::into))
+        Self::Break(label.into())
     }
 
     /// Creates a `Call` AST node.
@@ -612,18 +609,17 @@ impl Node {
     /// Creates a `ConstDecl` AST node.
     pub fn const_decl<D>(decl: D) -> Self
     where
-        D: Into<Vec<(String, Node)>>,
+        D: Into<Vec<(Sym, Node)>>,
     {
         Self::ConstDecl(decl.into())
     }
 
     /// Creates a `Continue` AST node.
-    pub fn continue_node<OL, L>(label: OL) -> Self
+    pub fn continue_node<OL>(label: OL) -> Self
     where
-        L: Into<String>,
-        OL: Into<Option<L>>,
+        OL: Into<Option<Sym>>,
     {
-        Self::Continue(label.into().map(L::into))
+        Self::Continue(label.into())
     }
 
     /// Creates a `DoWhileLoop` AST node.
@@ -636,21 +632,19 @@ impl Node {
     }
 
     /// Creates a `FunctionDecl` AST node.
-    pub fn function_decl<ON, N, P, B>(name: ON, params: P, body: B) -> Self
+    pub fn function_decl<ON, P, B>(name: ON, params: P, body: B) -> Self
     where
-        N: Into<String>,
-        ON: Into<Option<N>>,
+        ON: Into<Option<Sym>>,
         P: Into<Vec<FormalParameter>>,
         B: Into<Box<Node>>,
     {
-        Self::FunctionDecl(name.into().map(N::into), params.into(), body.into())
+        Self::FunctionDecl(name.into(), params.into(), body.into())
     }
 
     /// Creates a `GetConstField` AST node.
-    pub fn get_const_field<V, L>(value: V, label: L) -> Self
+    pub fn get_const_field<V, L>(value: V, label: Sym) -> Self
     where
         V: Into<Box<Node>>,
-        L: Into<String>,
     {
         Self::GetConstField(value.into(), label.into())
     }
@@ -697,17 +691,14 @@ impl Node {
     /// Creates a `LetDecl` AST node.
     pub fn let_decl<I>(init: I) -> Self
     where
-        I: Into<Vec<(String, Option<Node>)>>,
+        I: Into<Vec<(Sym, Option<Node>)>>,
     {
         Self::LetDecl(init.into())
     }
 
     /// Creates a `Local` AST node.
-    pub fn local<N>(name: N) -> Self
-    where
-        N: Into<String>,
-    {
-        Self::Local(name.into())
+    pub fn local(name: Sym) -> Self {
+        Self::Local(name)
     }
 
     /// Creates a `New` AST node.
@@ -816,7 +807,7 @@ impl Node {
     /// Creates a `VarDecl` AST node.
     pub fn var_decl<I>(init: I) -> Self
     where
-        I: Into<Vec<(String, Option<Node>)>>,
+        I: Into<Vec<(Sym, Option<Node>)>>,
     {
         Self::VarDecl(init.into())
     }
@@ -830,91 +821,143 @@ impl Node {
         Self::WhileLoop(condition.into(), body.into())
     }
 
+    /// Creates a structure that implements `fmt::Display` for this node.
+    pub fn display<'s, 'f>(&'s self, interner: &'f Interner) -> NodeDisplay<'s, 'f> {
+        NodeDisplay {
+            node: &self,
+            interner,
+        }
+    }
+}
+
+/// Structure implementing the `fmt::Display` trait for a `Node`.
+#[derive(Debug)]
+pub struct NodeDisplay<'n, 'i> {
+    node: &'n Node,
+    interner: &'i Interner,
+}
+
+impl NodeDisplay<'_, '_> {
     /// Implements the display formatting with indentation.
     fn display(&self, f: &mut fmt::Formatter<'_>, indentation: usize) -> fmt::Result {
         let indent = "    ".repeat(indentation);
-        match *self {
-            Self::Block(_) => {}
+        match *self.node {
+            Node::Block(_) => {}
             _ => write!(f, "{}", indent)?,
         }
 
-        match *self {
-            Self::Const(ref c) => write!(f, "{}", c),
-            Self::ConditionalOp(ref cond, ref if_true, ref if_false) => {
-                write!(f, "{} ? {} : {}", cond, if_true, if_false)
-            }
-            Self::ForLoop(_, _, _, _) => write!(f, "for loop"), // TODO
-            Self::This => write!(f, "this"),
-            Self::Try(_, _, _, _) => write!(f, "try/catch/finally"), // TODO
-            Self::Break(ref l) => write!(
+        match *self.node {
+            Node::Const(c) => write!(f, "{}", c.display(self.interner)),
+            Node::ConditionalOp(ref cond, ref if_true, ref if_false) => write!(
+                f,
+                "{} ? {} : {}",
+                cond.display(self.interner),
+                if_true.display(self.interner),
+                if_false.display(self.interner)
+            ),
+            Node::ForLoop(_, _, _, _) => write!(f, "for loop"), // TODO
+            Node::This => write!(f, "this"),
+            Node::Try(_, _, _, _) => write!(f, "try/catch/finally"), // TODO
+            Node::Break(l) => write!(
                 f,
                 "break{}",
                 if let Some(label) = l {
-                    format!(" {}", label)
+                    format!(
+                        " {}",
+                        self.interner
+                            .resolve(label)
+                            .expect("could not find label string for break statement")
+                    )
                 } else {
                     String::new()
                 }
             ),
-            Self::Continue(ref l) => write!(
+            Node::Continue(l) => write!(
                 f,
                 "continue{}",
                 if let Some(label) = l {
-                    format!(" {}", label)
+                    format!(
+                        " {}",
+                        self.interner
+                            .resolve(label)
+                            .expect("could not find label string for continue statement")
+                    )
                 } else {
                     String::new()
                 }
             ),
-            Self::Spread(ref node) => write!(f, "...{}", node),
-            Self::Block(ref block) => {
+            Node::Spread(ref node) => write!(f, "...{}", node.display(self.interner)),
+            Node::Block(ref block) => {
                 writeln!(f, "{{")?;
                 for node in block.iter() {
-                    node.display(f, indentation + 1)?;
+                    node.display(self.interner).display(f, indentation + 1)?;
 
                     match node {
-                        Self::Block(_)
-                        | Self::If(_, _, _)
-                        | Self::Switch(_, _, _)
-                        | Self::FunctionDecl(_, _, _)
-                        | Self::WhileLoop(_, _)
-                        | Self::StatementList(_) => {}
+                        Node::Block(_)
+                        | Node::If(_, _, _)
+                        | Node::Switch(_, _, _)
+                        | Node::FunctionDecl(_, _, _)
+                        | Node::WhileLoop(_, _)
+                        | Node::StatementList(_) => {}
                         _ => write!(f, ";")?,
                     }
                     writeln!(f)?;
                 }
                 write!(f, "{}}}", indent)
             }
-            Self::StatementList(ref list) => {
+            Node::StatementList(ref list) => {
                 for node in list.iter() {
-                    node.display(f, indentation + 1)?;
+                    node.display(self.interner).display(f, indentation + 1)?;
 
                     match node {
-                        Self::Block(_)
-                        | Self::If(_, _, _)
-                        | Self::Switch(_, _, _)
-                        | Self::FunctionDecl(_, _, _)
-                        | Self::WhileLoop(_, _)
-                        | Self::StatementList(_) => {}
+                        Node::Block(_)
+                        | Node::If(_, _, _)
+                        | Node::Switch(_, _, _)
+                        | Node::FunctionDecl(_, _, _)
+                        | Node::WhileLoop(_, _)
+                        | Node::StatementList(_) => {}
                         _ => write!(f, ";")?,
                     }
                     writeln!(f)?;
                 }
                 Ok(())
             }
-            Self::Local(ref s) => write!(f, "{}", s),
-            Self::GetConstField(ref ex, ref field) => write!(f, "{}.{}", ex, field),
-            Self::GetField(ref ex, ref field) => write!(f, "{}[{}]", ex, field),
-            Self::Call(ref ex, ref args) => {
-                write!(f, "{}(", ex)?;
-                let arg_strs: Vec<String> = args.iter().map(ToString::to_string).collect();
+            Node::Local(s) => write!(
+                f,
+                "{}",
+                self.interner
+                    .resolve(s)
+                    .expect("could not find local identifier name")
+            ),
+            Node::GetConstField(ref ex, field) => write!(
+                f,
+                "{}.{}",
+                ex.display(self.interner),
+                self.interner
+                    .resolve(field)
+                    .expect("field name string not found")
+            ),
+            Node::GetField(ref ex, ref field) => write!(
+                f,
+                "{}[{}]",
+                ex.display(self.interner),
+                field.display(self.interner)
+            ),
+            Node::Call(ref ex, ref args) => {
+                write!(f, "{}(", ex.display(self.interner))?;
+                let arg_strs: Vec<String> = args
+                    .iter()
+                    .map(|arg| arg.display(self.interner).to_string())
+                    .collect();
                 write!(f, "{})", arg_strs.join(", "))
             }
-            Self::New(ref call) => {
+            Node::New(ref call) => {
                 let (func, args) = match call.as_ref() {
-                    Self::Call(func, args) => (func, args),
+                    Node::Call(func, args) => (func, args),
                     _ => unreachable!("Node::New(ref call): 'call' must only be Node::Call type."),
                 };
 
-                write!(f, "new {}", func)?;
+                write!(f, "new {}", func.display(self.interner))?;
                 f.write_str("(")?;
                 let mut first = true;
                 for e in args.iter() {
@@ -922,59 +965,74 @@ impl Node {
                         f.write_str(", ")?;
                     }
                     first = false;
-                    write!(f, "{}", e)?;
+                    write!(f, "{}", e.display(self.interner))?;
                 }
                 f.write_str(")")
             }
-            Self::WhileLoop(ref cond, ref node) => {
-                write!(f, "while ({}) ", cond)?;
-                node.display(f, indentation)
+            Node::WhileLoop(ref cond, ref node) => {
+                write!(f, "while ({}) ", cond.display(self.interner))?;
+                node.display(self.interner).display(f, indentation)
             }
-            Self::DoWhileLoop(ref node, ref cond) => {
+            Node::DoWhileLoop(ref node, ref cond) => {
                 write!(f, "do")?;
-                node.display(f, indentation)?;
-                write!(f, "while ({})", cond)
+                node.display(self.interner).display(f, indentation)?;
+                write!(f, "while ({})", cond.display(self.interner))
             }
-            Self::If(ref cond, ref node, None) => {
-                write!(f, "if ({}) ", cond)?;
-                node.display(f, indentation)
+            Node::If(ref cond, ref node, None) => {
+                write!(f, "if ({}) ", cond.display(self.interner))?;
+                node.display(self.interner).display(f, indentation)
             }
-            Self::If(ref cond, ref node, Some(ref else_e)) => {
-                write!(f, "if ({}) ", cond)?;
-                node.display(f, indentation)?;
+            Node::If(ref cond, ref node, Some(ref else_e)) => {
+                write!(f, "if ({}) ", cond.display(self.interner))?;
+                node.display(self.interner).display(f, indentation)?;
                 f.write_str(" else ")?;
-                else_e.display(f, indentation)
+                else_e.display(self.interner).display(f, indentation)
             }
-            Self::Switch(ref val, ref vals, None) => {
-                writeln!(f, "switch ({}) {{", val)?;
+            Node::Switch(ref val, ref vals, None) => {
+                writeln!(f, "switch ({}) {{", val.display(self.interner))?;
                 for e in vals.iter() {
-                    writeln!(f, "{}case {}:", indent, e.0)?;
-                    join_nodes(f, &e.1)?;
+                    writeln!(f, "{}case {}:", indent, e.0.display(self.interner))?;
+                    join_nodes(f, &e.1, self.interner)?;
                 }
                 writeln!(f, "{}}}", indent)
             }
-            Self::Switch(ref val, ref vals, Some(ref def)) => {
-                writeln!(f, "switch ({}) {{", val)?;
+            Node::Switch(ref val, ref vals, Some(ref def)) => {
+                writeln!(f, "switch ({}) {{", val.display(self.interner))?;
                 for e in vals.iter() {
-                    writeln!(f, "{}case {}:", indent, e.0)?;
-                    join_nodes(f, &e.1)?;
+                    writeln!(f, "{}case {}:", indent, e.0.display(self.interner))?;
+                    join_nodes(f, &e.1, self.interner)?;
                 }
                 writeln!(f, "{}default:", indent)?;
-                def.display(f, indentation + 1)?;
+                def.display(self.interner).display(f, indentation + 1)?;
                 write!(f, "{}}}", indent)
             }
-            Self::Object(ref properties) => {
+            Node::Object(ref properties) => {
                 f.write_str("{\n")?;
                 for property in properties {
                     match property {
                         PropertyDefinition::IdentifierReference(key) => {
-                            write!(f, "{}    {},", indent, key)?;
+                            write!(
+                                f,
+                                "{}    {},",
+                                indent,
+                                self.interner
+                                    .resolve(*key)
+                                    .expect("could not find identifier reference key string")
+                            )?;
                         }
                         PropertyDefinition::Property(key, value) => {
-                            write!(f, "{}    {}: {},", indent, key, value)?;
+                            write!(
+                                f,
+                                "{}    {}: {},",
+                                indent,
+                                self.interner
+                                    .resolve(*key)
+                                    .expect("could not find property key string"),
+                                value.display(self.interner)
+                            )?;
                         }
                         PropertyDefinition::SpreadObject(key) => {
-                            write!(f, "{}    ...{},", indent, key)?;
+                            write!(f, "{}    ...{},", indent, key.display(self.interner))?;
                         }
                         PropertyDefinition::MethodDefinition(_kind, _key, _node) => {
                             // TODO: Implement display for PropertyDefinition::MethodDefinition.
@@ -984,68 +1042,99 @@ impl Node {
                 }
                 f.write_str("}")
             }
-            Self::ArrayDecl(ref arr) => {
+            Node::ArrayDecl(ref arr) => {
                 f.write_str("[")?;
-                join_nodes(f, arr)?;
+                join_nodes(f, arr, self.interner)?;
                 f.write_str("]")
             }
-            Self::FunctionDecl(ref name, ref _args, ref node) => {
+            Node::FunctionDecl(ref name, ref _args, ref node) => {
                 write!(f, "function ")?;
                 if let Some(func_name) = name {
-                    write!(f, "{}", func_name)?;
+                    write!(
+                        f,
+                        "{}",
+                        self.interner
+                            .resolve(*func_name)
+                            .expect("function name string not found")
+                    )?;
                 }
                 write!(f, "{{")?;
                 //join_nodes(f, args)?; TODO: port
                 f.write_str("} ")?;
-                node.display(f, indentation + 1)
+                node.display(self.interner).display(f, indentation + 1)
             }
-            Self::ArrowFunctionDecl(ref _args, ref node) => {
+            Node::ArrowFunctionDecl(ref _args, ref node) => {
                 write!(f, "(")?;
                 //join_nodes(f, args)?; TODO: port
                 f.write_str(") => ")?;
-                node.display(f, indentation)
+                node.display(self.interner).display(f, indentation)
             }
-            Self::BinOp(ref op, ref a, ref b) => write!(f, "{} {} {}", a, op, b),
-            Self::UnaryOp(ref op, ref a) => write!(f, "{}{}", op, a),
-            Self::Return(Some(ref ex)) => write!(f, "return {}", ex),
-            Self::Return(None) => write!(f, "return"),
-            Self::Throw(ref ex) => write!(f, "throw {}", ex),
-            Self::Assign(ref ref_e, ref val) => write!(f, "{} = {}", ref_e, val),
-            Self::VarDecl(ref vars) | Self::LetDecl(ref vars) => {
-                if let Self::VarDecl(_) = *self {
+            Node::BinOp(ref op, ref a, ref b) => write!(
+                f,
+                "{} {} {}",
+                a.display(self.interner),
+                op,
+                b.display(self.interner)
+            ),
+            Node::UnaryOp(ref op, ref a) => write!(f, "{}{}", op, a.display(self.interner)),
+            Node::Return(Some(ref ex)) => write!(f, "return {}", ex.display(self.interner)),
+            Node::Return(None) => write!(f, "return"),
+            Node::Throw(ref ex) => write!(f, "throw {}", ex.display(self.interner)),
+            Node::Assign(ref ref_e, ref val) => write!(
+                f,
+                "{} = {}",
+                ref_e.display(self.interner),
+                val.display(self.interner)
+            ),
+            Node::VarDecl(ref vars) | Node::LetDecl(ref vars) => {
+                if let Node::VarDecl(_) = *self.node {
                     f.write_str("var ")?;
                 } else {
                     f.write_str("let ")?;
                 }
                 for (key, val) in vars.iter() {
+                    let key_str = self.interner.resolve(*key).expect("key string disappeared");
                     match val {
-                        Some(x) => write!(f, "{} = {}", key, x)?,
-                        None => write!(f, "{}", key)?,
+                        Some(x) => write!(f, "{} = {}", key_str, x.display(self.interner))?,
+                        None => write!(f, "{}", key_str)?,
                     }
                 }
                 Ok(())
             }
-            Self::ConstDecl(ref vars) => {
+            Node::ConstDecl(ref vars) => {
                 f.write_str("const ")?;
                 for (key, val) in vars.iter() {
-                    write!(f, "{} = {}", key, val)?
+                    write!(
+                        f,
+                        "{} = {}",
+                        self.interner
+                            .resolve(*key)
+                            .expect("could not find const key string"),
+                        val.display(self.interner)
+                    )?
                 }
                 Ok(())
             }
-            Self::TypeOf(ref e) => write!(f, "typeof {}", e),
+            Node::TypeOf(ref e) => write!(f, "typeof {}", e.display(self.interner)),
         }
     }
 }
 
+impl fmt::Display for NodeDisplay<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display(f, 0)
+    }
+}
+
 /// Utility to join multiple Nodes into a single string.
-fn join_nodes(f: &mut fmt::Formatter<'_>, nodes: &[Node]) -> fmt::Result {
+fn join_nodes(f: &mut fmt::Formatter<'_>, nodes: &[Node], interner: &Interner) -> fmt::Result {
     let mut first = true;
     for e in nodes {
         if !first {
             f.write_str(", ")?;
         }
         first = false;
-        write!(f, "{}", e)?;
+        write!(f, "{}", e.display(interner))?;
     }
     Ok(())
 }
@@ -1068,18 +1157,15 @@ fn join_nodes(f: &mut fmt::Formatter<'_>, nodes: &[Node]) -> fmt::Result {
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Trace, Finalize)]
 pub struct FormalParameter {
-    pub name: String,
+    pub name: Sym,
     pub init: Option<Box<Node>>,
     pub is_rest_param: bool,
 }
 
 impl FormalParameter {
-    pub fn new<N>(name: N, init: Option<Box<Node>>, is_rest_param: bool) -> Self
-    where
-        N: Into<String>,
-    {
+    pub fn new(name: Sym, init: Option<Box<Node>>, is_rest_param: bool) -> Self {
         Self {
-            name: name.into(),
+            name,
             init,
             is_rest_param,
         }
@@ -1100,7 +1186,7 @@ impl FormalParameter {
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Glossary/property/JavaScript
 // TODO: Support all features: https://tc39.es/ecma262/#prod-PropertyDefinition
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
+#[derive(Debug, Clone, PartialEq, Trace, Finalize)]
 pub enum PropertyDefinition {
     /// Puts a variable into an object.
     ///
@@ -1110,7 +1196,7 @@ pub enum PropertyDefinition {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-IdentifierReference
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Object_initializer#Property_definitions
-    IdentifierReference(String),
+    IdentifierReference(Sym),
 
     /// Binds a property name to a JavaScript value.
     ///
@@ -1120,7 +1206,7 @@ pub enum PropertyDefinition {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-PropertyDefinition
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Object_initializer#Property_definitions
-    Property(String, Node),
+    Property(Sym, Node),
 
     /// A property of an object can also refer to a function or a getter or setter method.
     ///
@@ -1130,7 +1216,7 @@ pub enum PropertyDefinition {
     ///
     /// [spec]: https://tc39.es/ecma262/#prod-MethodDefinition
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Object_initializer#Method_definitions
-    MethodDefinition(MethodDefinitionKind, String, Node),
+    MethodDefinition(MethodDefinitionKind, Sym, Node),
 
     /// The Rest/Spread Properties for ECMAScript proposal (stage 4) adds spread properties to object literals.
     /// It copies own enumerable properties from a provided object onto a new object.
@@ -1148,29 +1234,24 @@ pub enum PropertyDefinition {
 
 impl PropertyDefinition {
     /// Creates an `IdentifierReference` property definition.
-    pub fn identifier_reference<I>(ident: I) -> Self
-    where
-        I: Into<String>,
-    {
-        Self::IdentifierReference(ident.into())
+    pub fn identifier_reference(ident: Sym) -> Self {
+        Self::IdentifierReference(ident)
     }
 
     /// Creates a `Property` definition.
-    pub fn property<N, V>(name: N, value: V) -> Self
+    pub fn property<V>(name: Sym, value: V) -> Self
     where
-        N: Into<String>,
         V: Into<Node>,
     {
-        Self::Property(name.into(), value.into())
+        Self::Property(name, value.into())
     }
 
     /// Creates a `MethodDefinition`.
-    pub fn method_definition<N, B>(kind: MethodDefinitionKind, name: N, body: B) -> Self
+    pub fn method_definition<B>(kind: MethodDefinitionKind, name: Sym, body: B) -> Self
     where
-        N: Into<String>,
         B: Into<Node>,
     {
-        Self::MethodDefinition(kind, name.into(), body.into())
+        Self::MethodDefinition(kind, name, body.into())
     }
 
     /// Creates a `SpreadObject`.
@@ -1194,7 +1275,7 @@ impl PropertyDefinition {
 /// [spec]: https://tc39.es/ecma262/#prod-MethodDefinition
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Method_definitions
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug, PartialEq, Trace, Finalize)]
+#[derive(Clone, Debug, Copy, PartialEq, Finalize)]
 pub enum MethodDefinitionKind {
     /// The `get` syntax binds an object property to a function that will be called when that property is looked up.
     ///
@@ -1237,4 +1318,17 @@ pub enum MethodDefinitionKind {
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions#Method_definition_syntax
     Ordinary,
     // TODO: support other method definition kinds, like `Generator`.
+}
+
+unsafe impl Trace for MethodDefinitionKind {
+    #[inline]
+    unsafe fn trace(&self) {}
+    #[inline]
+    unsafe fn root(&self) {}
+    #[inline]
+    unsafe fn unroot(&self) {}
+    #[inline]
+    fn finalize_glue(&self) {
+        Finalize::finalize(self)
+    }
 }

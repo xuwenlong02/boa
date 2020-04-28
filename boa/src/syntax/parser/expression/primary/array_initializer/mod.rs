@@ -49,7 +49,7 @@ impl ArrayLiteral {
 impl TokenParser for ArrayLiteral {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let mut elements = Vec::new();
 
         loop {
@@ -66,12 +66,12 @@ impl TokenParser for ArrayLiteral {
 
             if cursor.next_if(Punctuator::Spread).is_some() {
                 let node = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                    .parse(cursor)?;
+                    .parse(cursor, interner)?;
                 elements.push(Node::spread(node));
             } else {
                 elements.push(
                     AssignmentExpression::new(true, self.allow_yield, self.allow_await)
-                        .parse(cursor)?,
+                        .parse(cursor, interner)?,
                 );
             }
             cursor.next_if(Punctuator::Comma);

@@ -48,12 +48,13 @@ impl LeftHandSideExpression {
 impl TokenParser for LeftHandSideExpression {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TODO: Implement NewExpression: new MemberExpression
-        let lhs = MemberExpression::new(self.allow_yield, self.allow_await).parse(cursor)?;
+        let lhs =
+            MemberExpression::new(self.allow_yield, self.allow_await).parse(cursor, interner)?;
         match cursor.peek(0) {
             Some(ref tok) if tok.kind == TokenKind::Punctuator(Punctuator::OpenParen) => {
-                CallExpression::new(self.allow_yield, self.allow_await, lhs).parse(cursor)
+                CallExpression::new(self.allow_yield, self.allow_await, lhs).parse(cursor, interner)
             }
             _ => Ok(lhs), // TODO: is this correct?
         }

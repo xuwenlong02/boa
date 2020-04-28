@@ -8,9 +8,14 @@
 //! [spec]: https://tc39.es/ecma262/#sec-block
 
 use super::{declaration::Declaration, Statement};
-use crate::syntax::{
-    ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
-    parser::{AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser},
+use crate::{
+    syntax::{
+        ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+        parser::{
+            AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
+        },
+    },
+    Interner,
 };
 
 /// A `BlockStatement` is equivalent to a `Block`.
@@ -55,8 +60,8 @@ impl Block {
 impl TokenParser for Block {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
-        cursor.expect(Punctuator::OpenBlock, "block")?;
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
+        cursor.expect(Punctuator::OpenBlock, "block", interner)?;
         if let Some(tk) = cursor.peek(0) {
             if tk.kind == TokenKind::Punctuator(Punctuator::CloseBlock) {
                 cursor.next();
@@ -66,9 +71,9 @@ impl TokenParser for Block {
 
         let statement_list =
             StatementList::new(self.allow_yield, self.allow_await, self.allow_return, true)
-                .parse(cursor)
+                .parse(cursor, interner)
                 .map(Node::Block)?;
-        cursor.expect(Punctuator::CloseBlock, "block")?;
+        cursor.expect(Punctuator::CloseBlock, "block", interner)?;
 
         Ok(statement_list)
     }
@@ -115,7 +120,11 @@ impl StatementList {
 impl TokenParser for StatementList {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Self::Output, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Self::Output, ParseError> {
         let mut items = Vec::new();
 
         loop {
@@ -124,7 +133,11 @@ impl TokenParser for StatementList {
                     if self.break_when_closingbrase {
                         break;
                     } else {
-                        return Err(ParseError::Unexpected(token.clone(), None));
+                        return Err(ParseError::unexpected(
+                            token.display(interner).to_string(),
+                            token.pos,
+                            None,
+                        ));
                     }
                 }
                 None => {
@@ -139,7 +152,7 @@ impl TokenParser for StatementList {
 
             let item =
                 StatementListItem::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)?;
+                    .parse(cursor, interner)?;
             items.push(item);
 
             // move the cursor forward for any consecutive semicolon.
@@ -186,18 +199,17 @@ impl StatementListItem {
 impl TokenParser for StatementListItem {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::Function)
             | TokenKind::Keyword(Keyword::Const)
             | TokenKind::Keyword(Keyword::Let) => {
-                Declaration::new(self.allow_yield, self.allow_await).parse(cursor)
+                Declaration::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
-            _ => {
-                Statement::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)
-            }
+            _ => Statement::new(self.allow_yield, self.allow_await, self.allow_return)
+                .parse(cursor, interner),
         }
     }
 }

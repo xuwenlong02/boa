@@ -36,7 +36,10 @@ use super::{
     expression::Expression, AllowAwait, AllowReturn, AllowYield, Cursor, ParseError, ParseResult,
     TokenParser,
 };
-use crate::syntax::ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind};
+use crate::{
+    syntax::ast::{keyword::Keyword, node::Node, punc::Punctuator, token::TokenKind},
+    Interner,
+};
 
 /// Statement parsing.
 ///
@@ -89,63 +92,69 @@ impl Statement {
 impl TokenParser for Statement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TODO: add BreakableStatement and divide Whiles, fors and so on to another place.
         let tok = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::If) => {
                 IfStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Var) => {
-                VariableStatement::new(self.allow_yield, self.allow_await).parse(cursor)
+                VariableStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::While) => {
                 WhileStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Do) => {
                 DoWhileStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::For) => {
                 ForStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Return) => {
                 if self.allow_return.0 {
-                    ReturnStatement::new(self.allow_yield, self.allow_await).parse(cursor)
+                    ReturnStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
                 } else {
-                    Err(ParseError::Unexpected(tok.clone(), Some("statement")))
+                    Err(ParseError::Unexpected(
+                        tok.display(interner).to_string(),
+                        tok.pos,
+                        Some("statement"),
+                    ))
                 }
             }
             TokenKind::Keyword(Keyword::Break) => {
-                BreakStatement::new(self.allow_yield, self.allow_await).parse(cursor)
+                BreakStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Continue) => {
-                ContinueStatement::new(self.allow_yield, self.allow_await).parse(cursor)
+                ContinueStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Try) => {
                 TryStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Throw) => {
-                ThrowStatement::new(self.allow_yield, self.allow_await).parse(cursor)
+                ThrowStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
             TokenKind::Keyword(Keyword::Switch) => {
                 SwitchStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
                 BlockStatement::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)
+                    .parse(cursor, interner)
             }
             // TODO: https://tc39.es/ecma262/#prod-LabelledStatement
             // TokenKind::Punctuator(Punctuator::Semicolon) => {
             //     return Ok(Node::new(NodeBase::Nope, tok.pos))
             // }
-            _ => ExpressionStatement::new(self.allow_yield, self.allow_await).parse(cursor),
+            _ => {
+                ExpressionStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
+            }
         }
     }
 }
@@ -191,7 +200,11 @@ impl StatementList {
 impl TokenParser for StatementList {
     type Output = Vec<Node>;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> Result<Vec<Node>, ParseError> {
+    fn parse(
+        self,
+        cursor: &mut Cursor<'_>,
+        interner: &mut Interner,
+    ) -> Result<Vec<Node>, ParseError> {
         let mut items = Vec::new();
 
         loop {
@@ -200,7 +213,11 @@ impl TokenParser for StatementList {
                     if self.break_when_closingbrase {
                         break;
                     } else {
-                        return Err(ParseError::Unexpected(token.clone(), None));
+                        return Err(ParseError::unexpected(
+                            token.display(interner).to_string(),
+                            token.pos,
+                            None,
+                        ));
                     }
                 }
                 None => {
@@ -215,7 +232,7 @@ impl TokenParser for StatementList {
 
             let item =
                 StatementListItem::new(self.allow_yield, self.allow_await, self.allow_return)
-                    .parse(cursor)?;
+                    .parse(cursor, interner)?;
             items.push(item);
 
             // move the cursor forward for any consecutive semicolon.
@@ -262,18 +279,17 @@ impl StatementListItem {
 impl TokenParser for StatementListItem {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let tok = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
         match tok.kind {
             TokenKind::Keyword(Keyword::Function)
             | TokenKind::Keyword(Keyword::Const)
             | TokenKind::Keyword(Keyword::Let) => {
-                Declaration::new(self.allow_yield, self.allow_await).parse(cursor)
+                Declaration::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
-            _ => {
-                Statement::new(self.allow_yield, self.allow_await, self.allow_return).parse(cursor)
-            }
+            _ => Statement::new(self.allow_yield, self.allow_await, self.allow_return)
+                .parse(cursor, interner),
         }
     }
 }
@@ -307,9 +323,10 @@ impl ExpressionStatement {
 impl TokenParser for ExpressionStatement {
     type Output = Node;
 
-    fn parse(self, cursor: &mut Cursor<'_>) -> ParseResult {
+    fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         // TODO: lookahead
-        let expr = Expression::new(true, self.allow_yield, self.allow_await).parse(cursor)?;
+        let expr =
+            Expression::new(true, self.allow_yield, self.allow_await).parse(cursor, interner)?;
 
         cursor.expect_semicolon(false, "expression statement")?;
 
