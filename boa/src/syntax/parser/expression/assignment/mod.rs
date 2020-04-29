@@ -76,7 +76,7 @@ impl TokenParser for AssignmentExpression {
             // a=>{}
             TokenKind::Identifier(_)
                 if cursor
-                    .peek_expect_no_lineterminator(1, "arrow function")
+                    .peek_expect_no_lineterminator(1, "arrow function", interner)
                     .is_ok() =>
             {
                 if let Some(tok) = cursor.peek(1) {
@@ -94,7 +94,7 @@ impl TokenParser for AssignmentExpression {
             TokenKind::Punctuator(Punctuator::OpenParen) => {
                 if let Some(node) =
                     ArrowFunction::new(self.allow_in, self.allow_yield, self.allow_await)
-                        .try_parse(cursor)
+                        .try_parse(cursor, interner)
                 {
                     return Ok(node);
                 }

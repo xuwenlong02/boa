@@ -120,7 +120,7 @@ impl TokenParser for Statement {
                 if self.allow_return.0 {
                     ReturnStatement::new(self.allow_yield, self.allow_await).parse(cursor, interner)
                 } else {
-                    Err(ParseError::Unexpected(
+                    Err(ParseError::unexpected(
                         tok.display(interner).to_string(),
                         tok.pos,
                         Some("statement"),

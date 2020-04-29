@@ -1,8 +1,6 @@
 //! Error and result implementation for the parser.
-use crate::{
-    syntax::ast::{keyword::Keyword, node::Node, pos::Position},
-    Interner,
-};
+
+use crate::syntax::ast::{keyword::Keyword, node::Node, pos::Position};
 use std::fmt;
 
 /// Result of a parsing operation.

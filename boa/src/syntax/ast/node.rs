@@ -15,6 +15,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 /// A Javascript AST Node.
+// TODO: change all Vec<Node> for a Box<[Node]> if possible once
+// <https://github.com/Manishearth/rust-gc/issues/89> gets solved.
 #[cfg_attr(feature = "serde-ast", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Trace, Finalize, PartialEq)]
 pub enum Node {
@@ -642,7 +644,7 @@ impl Node {
     }
 
     /// Creates a `GetConstField` AST node.
-    pub fn get_const_field<V, L>(value: V, label: Sym) -> Self
+    pub fn get_const_field<V>(value: V, label: Sym) -> Self
     where
         V: Into<Box<Node>>,
     {
@@ -1320,6 +1322,7 @@ pub enum MethodDefinitionKind {
     // TODO: support other method definition kinds, like `Generator`.
 }
 
+// TODO: waiting for <https://github.com/Manishearth/rust-gc/issues/87> to remove unsafe code.
 unsafe impl Trace for MethodDefinitionKind {
     #[inline]
     unsafe fn trace(&self) {}

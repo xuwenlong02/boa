@@ -11,12 +11,14 @@ use crate::{
 /// Checks an empty array.
 #[test]
 fn check_empty() {
+    let mut int = Interner::new();
     check_parser("[]", &[Node::ArrayDecl(Vec::new())], int);
 }
 
 /// Checks an array with empty slot.
 #[test]
 fn check_empty_slot() {
+    let mut int = Interner::new();
     check_parser(
         "[,]",
         &[Node::ArrayDecl(vec![Node::Const(Const::Undefined)])],
@@ -27,6 +29,7 @@ fn check_empty_slot() {
 /// Checks a numeric array.
 #[test]
 fn check_numeric_array() {
+    let mut int = Interner::new();
     check_parser(
         "[1, 2, 3]",
         &[Node::ArrayDecl(vec![
@@ -41,6 +44,7 @@ fn check_numeric_array() {
 // Checks a numeric array with trailing comma
 #[test]
 fn check_numeric_array_trailing() {
+    let mut int = Interner::new();
     check_parser(
         "[1, 2, 3,]",
         &[Node::ArrayDecl(vec![
@@ -55,6 +59,7 @@ fn check_numeric_array_trailing() {
 /// Checks a numeric array with an elision.
 #[test]
 fn check_numeric_array_elision() {
+    let mut int = Interner::new();
     check_parser(
         "[1, 2, , 3]",
         &[Node::ArrayDecl(vec![
@@ -70,6 +75,7 @@ fn check_numeric_array_elision() {
 /// Checks a numeric array with repeated elisions.
 #[test]
 fn check_numeric_array_repeated_elision() {
+    let mut int = Interner::new();
     check_parser(
         "[1, 2, ,, 3]",
         &[Node::ArrayDecl(vec![
@@ -86,11 +92,12 @@ fn check_numeric_array_repeated_elision() {
 /// Checks a combined array.
 #[test]
 fn check_combined() {
+    let mut int = Interner::new();
     check_parser(
         "[1, \"a\", 2]",
         &[Node::ArrayDecl(vec![
             Node::const_node(1.0),
-            Node::const_node("a"),
+            Node::const_node(int.get_or_intern("a")),
             Node::const_node(2.0),
         ])],
         int,
@@ -100,11 +107,12 @@ fn check_combined() {
 /// Checks a combined array with an empty string
 #[test]
 fn check_combined_empty_str() {
+    let mut int = Interner::new();
     check_parser(
         "[1, \"\", 2]",
         &[Node::ArrayDecl(vec![
             Node::const_node(1.0),
-            Node::const_node(""),
+            Node::const_node(int.get_or_intern("")),
             Node::const_node(2.0),
         ])],
         int,

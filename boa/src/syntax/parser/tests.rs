@@ -33,6 +33,7 @@ pub(super) fn check_invalid(js: &str) {
 #[test]
 fn check_construct_call_precedence() {
     let mut int = Interner::new();
+    let mut int = Interner::new();
     check_parser(
         "new Date().getTime()",
         &[Node::call(
@@ -53,6 +54,7 @@ fn check_construct_call_precedence() {
 fn assing_operator_precedence() {
     let mut int = Interner::new();
     let a_sym = int.get_or_intern("a");
+    let mut int = Interner::new();
     check_parser(
         "a = a + 1",
         &[Node::assign(

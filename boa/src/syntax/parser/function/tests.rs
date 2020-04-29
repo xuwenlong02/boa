@@ -10,6 +10,7 @@ use crate::{
 /// Checks basic function declaration parsing.
 #[test]
 fn check_basic() {
+    let mut int = Interner::new();
     check_parser(
         "function foo(a) { return a; }",
         &[Node::function_decl(
@@ -23,6 +24,7 @@ fn check_basic() {
 /// Checks basic function declaration parsing with automatic semicolon insertion.
 #[test]
 fn check_basic_semicolon_insertion() {
+    let mut int = Interner::new();
     check_parser(
         "function foo(a) { return a }",
         &[Node::function_decl(
@@ -37,6 +39,7 @@ fn check_basic_semicolon_insertion() {
 /// Checks functions with empty returns.
 #[test]
 fn check_empty_return() {
+    let mut int = Interner::new();
     check_parser(
         "function foo(a) { return; }",
         &[Node::function_decl(
@@ -50,6 +53,7 @@ fn check_empty_return() {
 /// Checks functions with empty returns without semicolon
 #[test]
 fn check_empty_return_semicolon_insertion() {
+    let mut int = Interner::new();
     check_parser(
         "function foo(a) { return }",
         &[Node::function_decl(
@@ -64,6 +68,7 @@ fn check_empty_return_semicolon_insertion() {
 /// Checks rest operator parsing.
 #[test]
 fn check_rest_operator() {
+    let mut int = Interner::new();
     check_parser(
         "function foo(a, ...b) {}",
         &[Node::function_decl(
@@ -81,6 +86,7 @@ fn check_rest_operator() {
 /// Checks an arrow function with only a rest parameter.
 #[test]
 fn check_arrow_only_rest() {
+    let mut int = Interner::new();
     check_parser(
         "(...a) => {}",
         &[Node::arrow_function_decl(
@@ -94,6 +100,7 @@ fn check_arrow_only_rest() {
 /// Checks an arrow function with a rest parameter.
 #[test]
 fn check_arrow_rest() {
+    let mut int = Interner::new();
     check_parser(
         "(a, b, ...c) => {}",
         &[Node::arrow_function_decl(
@@ -111,6 +118,7 @@ fn check_arrow_rest() {
 /// Checks an arrow function with expression return.
 #[test]
 fn check_arrow() {
+    let mut int = Interner::new();
     check_parser(
         "(a, b) => { return a + b; }",
         &[Node::arrow_function_decl(
@@ -130,6 +138,7 @@ fn check_arrow() {
 /// Checks an arrow function with expression return and automatic semicolon insertion
 #[test]
 fn check_arrow_semicolon_insertion() {
+    let mut int = Interner::new();
     check_parser(
         "(a, b) => { return a + b }",
         &[Node::arrow_function_decl(
@@ -150,6 +159,7 @@ fn check_arrow_semicolon_insertion() {
 /// Checks arrow function with empty return
 #[test]
 fn check_arrow_epty_return() {
+    let mut int = Interner::new();
     check_parser(
         "(a, b) => { return; }",
         &[Node::arrow_function_decl(
@@ -165,6 +175,7 @@ fn check_arrow_epty_return() {
 /// Checks an arrow function with empty return, with automatic semicolon insertion.
 #[test]
 fn check_arrow_empty_return_semicolon_insertion() {
+    let mut int = Interner::new();
     check_parser(
         "(a, b) => { return }",
         &[Node::arrow_function_decl(

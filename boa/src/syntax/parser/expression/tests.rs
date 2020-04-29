@@ -10,11 +10,13 @@ use crate::{
 /// Checks numeric operations
 #[test]
 fn check_numeric_operations() {
+    let mut int = Interner::new();
     check_parser(
         "a + b",
         &[Node::bin_op(NumOp::Add, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a+1",
         &[Node::bin_op(
@@ -24,11 +26,13 @@ fn check_numeric_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a - b",
         &[Node::bin_op(NumOp::Sub, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a-1",
         &[Node::bin_op(
@@ -38,11 +42,13 @@ fn check_numeric_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a / b",
         &[Node::bin_op(NumOp::Div, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a/2",
         &[Node::bin_op(
@@ -52,11 +58,13 @@ fn check_numeric_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a * b",
         &[Node::bin_op(NumOp::Mul, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a*2",
         &[Node::bin_op(
@@ -66,11 +74,13 @@ fn check_numeric_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a ** b",
         &[Node::bin_op(NumOp::Exp, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a**2",
         &[Node::bin_op(
@@ -80,11 +90,13 @@ fn check_numeric_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a % b",
         &[Node::bin_op(NumOp::Mod, Node::local("a"), Node::local("b"))],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a%2",
         &[Node::bin_op(
@@ -99,6 +111,7 @@ fn check_numeric_operations() {
 // Checks complex numeric operations.
 #[test]
 fn check_complex_numeric_operations() {
+    let mut int = Interner::new();
     check_parser(
         "a + d*(b-3)+1",
         &[Node::bin_op(
@@ -121,6 +134,7 @@ fn check_complex_numeric_operations() {
 /// Checks bitwise operations.
 #[test]
 fn check_bitwise_operations() {
+    let mut int = Interner::new();
     check_parser(
         "a & b",
         &[Node::bin_op(
@@ -130,6 +144,7 @@ fn check_bitwise_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a&b",
         &[Node::bin_op(
@@ -140,6 +155,7 @@ fn check_bitwise_operations() {
         int,
     );
 
+    let mut int = Interner::new();
     check_parser(
         "a | b",
         &[Node::bin_op(
@@ -149,6 +165,7 @@ fn check_bitwise_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a|b",
         &[Node::bin_op(
@@ -159,6 +176,7 @@ fn check_bitwise_operations() {
         int,
     );
 
+    let mut int = Interner::new();
     check_parser(
         "a ^ b",
         &[Node::bin_op(
@@ -168,6 +186,7 @@ fn check_bitwise_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a^b",
         &[Node::bin_op(
@@ -178,6 +197,7 @@ fn check_bitwise_operations() {
         int,
     );
 
+    let mut int = Interner::new();
     check_parser(
         "a << b",
         &[Node::bin_op(
@@ -187,6 +207,7 @@ fn check_bitwise_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a<<b",
         &[Node::bin_op(
@@ -197,6 +218,7 @@ fn check_bitwise_operations() {
         int,
     );
 
+    let mut int = Interner::new();
     check_parser(
         "a >> b",
         &[Node::bin_op(
@@ -206,6 +228,7 @@ fn check_bitwise_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a>>b",
         &[Node::bin_op(
@@ -220,6 +243,7 @@ fn check_bitwise_operations() {
 /// Checks assignment operations.
 #[test]
 fn check_assign_operations() {
+    let mut int = Interner::new();
     check_parser(
         "a += b",
         &[Node::bin_op(
@@ -229,6 +253,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a -= b",
         &[Node::bin_op(
@@ -238,6 +263,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a *= b",
         &[Node::bin_op(
@@ -247,6 +273,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a **= b",
         &[Node::bin_op(
@@ -256,6 +283,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a /= b",
         &[Node::bin_op(
@@ -265,6 +293,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a %= b",
         &[Node::bin_op(
@@ -274,6 +303,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a &= b",
         &[Node::bin_op(
@@ -283,6 +313,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a |= b",
         &[Node::bin_op(
@@ -292,6 +323,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a ^= b",
         &[Node::bin_op(
@@ -301,6 +333,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a <<= b",
         &[Node::bin_op(
@@ -310,6 +343,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a >>= b",
         &[Node::bin_op(
@@ -319,6 +353,7 @@ fn check_assign_operations() {
         )],
         int,
     );
+    let mut int = Interner::new();
     check_parser(
         "a %= 10 / 2",
         &[Node::bin_op(

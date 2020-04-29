@@ -59,9 +59,10 @@ impl TokenParser for CallExpression {
             }
             _ => {
                 let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
-                return Err(ParseError::Expected(
-                    vec![TokenKind::Punctuator(Punctuator::OpenParen)],
-                    next_token.clone(),
+                return Err(ParseError::expected(
+                    vec![Punctuator::OpenParen.to_string()],
+                    next_token.display(interner).to_string(),
+                    next_token.pos,
                     "call expression",
                 ));
             }
@@ -76,15 +77,16 @@ impl TokenParser for CallExpression {
                 }
                 TokenKind::Punctuator(Punctuator::Dot) => {
                     let _ = cursor.next().ok_or(ParseError::AbruptEnd)?; // We move the cursor.
-                    match &cursor.next().ok_or(ParseError::AbruptEnd)?.kind {
+                    match cursor.next().ok_or(ParseError::AbruptEnd)?.kind {
                         TokenKind::Identifier(name) => {
                             lhs = Node::get_const_field(lhs, name);
                         }
                         TokenKind::Keyword(kw) => {
-                            lhs = Node::get_const_field(lhs, kw.to_string());
+                            lhs =
+                                Node::get_const_field(lhs, interner.get_or_intern(kw.to_string()));
                         }
                         _ => {
-                            return Err(ParseError::Expected(
+                            return Err(ParseError::expected(
                                 vec![String::from("identifier")],
                                 tok.display(interner).to_string(),
                                 tok.pos,

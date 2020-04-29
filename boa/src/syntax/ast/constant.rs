@@ -137,6 +137,7 @@ impl From<bool> for Const {
     }
 }
 
+// TODO: waiting for <https://github.com/Manishearth/rust-gc/issues/87> to remove unsafe code.
 unsafe impl Trace for Const {
     #[inline]
     unsafe fn trace(&self) {}

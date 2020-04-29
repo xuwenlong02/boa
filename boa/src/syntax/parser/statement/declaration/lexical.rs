@@ -109,12 +109,13 @@ impl TokenParser for BindingList {
 
         loop {
             let token = cursor.next().ok_or(ParseError::AbruptEnd)?;
-            let name = if let TokenKind::Identifier(ref name) = token.kind {
-                name.clone()
+            let name = if let TokenKind::Identifier(name) = token.kind {
+                name
             } else {
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![String::from("identifier")],
-                    token.clone(),
+                    token.display(interner).to_string(),
+                    token.pos,
                     if self.is_const {
                         "const declaration"
                     } else {
@@ -137,9 +138,11 @@ impl TokenParser for BindingList {
                 }
                 _ => {
                     if self.is_const {
-                        return Err(ParseError::Expected(
-                            vec![TokenKind::Punctuator(Punctuator::Assign)],
-                            cursor.next().ok_or(ParseError::AbruptEnd)?.clone(),
+                        let next_tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
+                        return Err(ParseError::expected(
+                            vec![Punctuator::Assign.to_string()],
+                            next_tok.display(interner).to_string(),
+                            next_tok.pos,
                             "const declaration",
                         ));
                     } else {
@@ -154,14 +157,16 @@ impl TokenParser for BindingList {
                     let _ = cursor.next();
                 }
                 _ => {
-                    return Err(ParseError::Expected(
+                    let next_tok = cursor.next().ok_or(ParseError::AbruptEnd)?;
+                    return Err(ParseError::expected(
                         vec![
-                            TokenKind::Punctuator(Punctuator::Semicolon),
-                            TokenKind::LineTerminator,
+                            Punctuator::Semicolon.to_string(),
+                            TokenKind::LineTerminator.display(interner).to_string(),
                         ],
-                        cursor.next().ok_or(ParseError::AbruptEnd)?.clone(),
+                        next_tok.display(interner).to_string(),
+                        next_tok.pos,
                         "lexical declaration",
-                    ))
+                    ));
                 }
             }
         }

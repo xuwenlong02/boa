@@ -55,10 +55,11 @@ use string_interner::{StringInterner, Symbol};
 pub use serde_json;
 
 fn parser_expr(src: &str) -> Result<Node, String> {
-    let mut lexer = Lexer::new(src);
+    let mut interner = Interner::new();
+    let mut lexer = Lexer::new(src, &mut interner);
     lexer.lex().map_err(|e| format!("SyntaxError: {}", e))?;
     let tokens = lexer.tokens;
-    Parser::new(&tokens, lexer.interner)
+    Parser::new(&tokens, interner)
         .parse_all()
         .map_err(|e| format!("ParsingError: {}", e))
 }
@@ -137,6 +138,7 @@ impl Symbol for Sym {
     }
 }
 
+// TODO: waiting for <https://github.com/Manishearth/rust-gc/issues/87> to remove unsafe code.
 unsafe impl Trace for Sym {
     #[inline]
     unsafe fn trace(&self) {}

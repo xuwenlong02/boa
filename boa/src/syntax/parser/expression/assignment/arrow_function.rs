@@ -76,12 +76,13 @@ impl TokenParser for ArrowFunction {
                 is_rest_param: false,
             }],
             _ => {
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![
-                        TokenKind::Punctuator(Punctuator::OpenParen),
+                        Punctuator::OpenParen.to_string(),
                         String::from("identifier"),
                     ],
-                    next_token.clone(),
+                    next_token.display(interner).to_string(),
+                    next_token.pos,
                     "arrow function",
                 ))
             }

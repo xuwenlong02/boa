@@ -65,9 +65,10 @@ impl TokenParser for DoWhileStatement {
         let next_token = cursor.peek(0).ok_or(ParseError::AbruptEnd)?;
 
         if next_token.kind != TokenKind::Keyword(Keyword::While) {
-            return Err(ParseError::Expected(
-                vec![TokenKind::Keyword(Keyword::While)],
-                next_token.clone(),
+            return Err(ParseError::expected(
+                vec![Keyword::While.to_string()],
+                next_token.display(interner).to_string(),
+                next_token.pos,
                 "do while statement",
             ));
         }

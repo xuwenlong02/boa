@@ -67,7 +67,7 @@ impl TokenParser for BreakStatement {
         let node = if let TokenKind::Identifier(name) = tok.kind {
             Node::break_node(name)
         } else {
-            return Err(ParseError::Expected(
+            return Err(ParseError::expected(
                 vec![String::from("identifier")],
                 tok.display(interner).to_string(),
                 tok.pos,

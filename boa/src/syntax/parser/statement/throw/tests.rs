@@ -5,5 +5,10 @@ use crate::{
 
 #[test]
 fn check_throw_parsing() {
-    check_parser("throw 'error';", &[Node::throw(Node::const_node("error"))]);
+    let mut int = Interner::new();
+    check_parser(
+        "throw 'error';",
+        &[Node::throw(Node::const_node(int.get_or_intern("error")))],
+        int,
+    );
 }

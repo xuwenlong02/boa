@@ -58,12 +58,10 @@ impl TokenParser for TryStatement {
         if next_token.kind != TokenKind::Keyword(Keyword::Catch)
             && next_token.kind != TokenKind::Keyword(Keyword::Finally)
         {
-            return Err(ParseError::Expected(
-                vec![
-                    TokenKind::Keyword(Keyword::Catch),
-                    TokenKind::Keyword(Keyword::Finally),
-                ],
-                next_token.clone(),
+            return Err(ParseError::expected(
+                vec![Keyword::Catch.to_string(), Keyword::Finally.to_string()],
+                next_token.display(interner).to_string(),
+                next_token.pos,
                 "try statement",
             ));
         }
@@ -77,7 +75,7 @@ impl TokenParser for TryStatement {
             let catch_param = if let TokenKind::Identifier(s) = tok.kind {
                 Node::local(s)
             } else {
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![String::from("identifier")],
                     tok.display(interner).to_string(),
                     tok.pos,

@@ -64,11 +64,13 @@ impl TokenParser for MemberExpression {
             match tok.kind {
                 TokenKind::Punctuator(Punctuator::Dot) => {
                     let _ = cursor.next().ok_or(ParseError::AbruptEnd)?; // We move the cursor forward.
-                    match &cursor.next().ok_or(ParseError::AbruptEnd)?.kind {
+                    match cursor.next().ok_or(ParseError::AbruptEnd)?.kind {
                         TokenKind::Identifier(name) => lhs = Node::get_const_field(lhs, name),
-                        TokenKind::Keyword(kw) => lhs = Node::get_const_field(lhs, kw.to_string()),
+                        TokenKind::Keyword(kw) => {
+                            lhs = Node::get_const_field(lhs, interner.get_or_intern(kw.to_string()))
+                        }
                         _ => {
-                            return Err(ParseError::Expected(
+                            return Err(ParseError::expected(
                                 vec![String::from("identifier")],
                                 tok.display(interner).to_string(),
                                 tok.pos,

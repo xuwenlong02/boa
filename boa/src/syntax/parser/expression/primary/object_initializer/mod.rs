@@ -76,12 +76,13 @@ impl TokenParser for ObjectLiteral {
 
             if cursor.next_if(Punctuator::Comma).is_none() {
                 let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![
                         TokenKind::Punctuator(Punctuator::Comma),
                         TokenKind::Punctuator(Punctuator::CloseBlock),
                     ],
-                    next_token.clone(),
+                    next_token.display(interner).to_string(),
+                    next_token.pos,
                     "object literal",
                 ));
             }
@@ -213,16 +214,18 @@ impl TokenParser for MethodDefinition {
                 cursor.expect(Punctuator::CloseParen, "method definition", interner)?;
                 if idn == "get" {
                     if !params.is_empty() {
-                        return Err(ParseError::Unexpected(
-                            first_param,
+                        return Err(ParseError::unexpected(
+                            first_param.display(interner).to_string(),
+                            first_param.pos,
                             Some("getter functions must have no arguments"),
                         ));
                     }
                     (MethodDefinitionKind::Get, prop_name, params)
                 } else {
                     if params.len() != 1 {
-                        return Err(ParseError::Unexpected(
-                            first_param,
+                        return Err(ParseError::unexpected(
+                            first_param.display(interner).to_string(),
+                            first_param.pos,
                             Some("setter functions must have one argument"),
                         ));
                     }
@@ -243,6 +246,7 @@ impl TokenParser for MethodDefinition {
         cursor.expect(
             TokenKind::Punctuator(Punctuator::OpenBlock),
             "property method definition",
+            interner,
         )?;
         let body = FunctionBody::new(false, false)
             .parse(cursor, interner)
@@ -250,6 +254,7 @@ impl TokenParser for MethodDefinition {
         cursor.expect(
             TokenKind::Punctuator(Punctuator::CloseBlock),
             "property method definition",
+            interner,
         )?;
 
         Ok(node::PropertyDefinition::MethodDefinition(

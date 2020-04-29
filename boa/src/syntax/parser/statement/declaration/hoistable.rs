@@ -96,9 +96,10 @@ impl TokenParser for FunctionDeclaration {
         let name = if let TokenKind::Identifier(name) = token.kind {
             name.clone()
         } else {
-            return Err(ParseError::Expected(
-                vec![TokenKind::identifier("function name")],
-                token.clone(),
+            return Err(ParseError::expected(
+                vec![String::from("function name")],
+                token.display(interner).to_string(),
+                token.pos,
                 "function declaration",
             ));
         };

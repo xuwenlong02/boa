@@ -9,9 +9,10 @@ use crate::{
 /// Checks object literal parsing.
 #[test]
 fn check_object_literal() {
+    let mut int = Interner::new();
     let object_properties = vec![
-        PropertyDefinition::property("a", Node::const_node(true)),
-        PropertyDefinition::property("b", Node::const_node(false)),
+        PropertyDefinition::property(int.get_or_intern("a"), Node::const_node(true)),
+        PropertyDefinition::property(int.get_or_intern("b"), Node::const_node(false)),
     ];
 
     check_parser(
@@ -21,20 +22,22 @@ fn check_object_literal() {
         };
         ",
         &[Node::const_decl(vec![(
-            String::from("x"),
+            int.get_or_intern("x"),
             Node::Object(object_properties),
         )])],
+        int,
     );
 }
 
 /// Tests short function syntax.
 #[test]
 fn check_object_short_function() {
+    let mut int = Interner::new();
     let object_properties = vec![
-        PropertyDefinition::property("a", Node::const_node(true)),
+        PropertyDefinition::property(int.get_or_intern("a"), Node::const_node(true)),
         PropertyDefinition::method_definition(
             MethodDefinitionKind::Ordinary,
-            "b",
+            int.get_or_intern("b"),
             Node::function_decl::<_, String, _, _>(None, Vec::new(), Node::StatementList(vec![])),
         ),
     ];
@@ -46,23 +49,25 @@ fn check_object_short_function() {
         };
         ",
         &[Node::ConstDecl(vec![(
-            String::from("x"),
+            int.get_or_intern("x"),
             Node::Object(object_properties),
         )])],
+        int,
     );
 }
 
 /// Testing short function syntax with arguments.
 #[test]
 fn check_object_short_function_arguments() {
+    let mut int = Interner::new();
     let object_properties = vec![
-        PropertyDefinition::property("a", Node::const_node(true)),
+        PropertyDefinition::property(int.get_or_intern("a"), Node::const_node(true)),
         PropertyDefinition::method_definition(
             MethodDefinitionKind::Ordinary,
-            "b",
-            Node::function_decl::<_, String, _, _>(
+            int.get_or_intern("b"),
+            Node::function_decl(
                 None,
-                vec![FormalParameter::new("test", None, false)],
+                vec![FormalParameter::new(int.get_or_intern("test"), None, false)],
                 Node::StatementList(Vec::new()),
             ),
         ),
@@ -75,19 +80,21 @@ fn check_object_short_function_arguments() {
          };
         ",
         &[Node::ConstDecl(vec![(
-            String::from("x"),
+            int.get_or_intern("x"),
             Node::Object(object_properties),
         )])],
+        int,
     );
 }
 
 #[test]
 fn check_object_getter() {
+    let mut int = Interner::new();
     let object_properties = vec![
-        PropertyDefinition::property("a", Node::const_node(true)),
+        PropertyDefinition::property(int.get_or_intern("a"), Node::const_node(true)),
         PropertyDefinition::method_definition(
             MethodDefinitionKind::Get,
-            "b",
+            int.get_or_intern("b"),
             Node::FunctionDecl(None, Vec::new(), Box::new(Node::StatementList(Vec::new()))),
         ),
     ];
@@ -99,22 +106,24 @@ fn check_object_getter() {
         };
         ",
         &[Node::ConstDecl(vec![(
-            String::from("x"),
+            int.get_or_intern("x"),
             Node::Object(object_properties),
         )])],
+        int,
     );
 }
 
 #[test]
 fn check_object_setter() {
+    let mut int = Interner::new();
     let object_properties = vec![
-        PropertyDefinition::property("a", Node::const_node(true)),
+        PropertyDefinition::property(int.get_or_intern("a"), Node::const_node(true)),
         PropertyDefinition::method_definition(
             MethodDefinitionKind::Set,
-            "b",
+            int.get_or_intern("b"),
             Node::FunctionDecl(
                 None,
-                vec![FormalParameter::new("test", None, false)],
+                vec![FormalParameter::new(int.get_or_intern("test"), None, false)],
                 Box::new(Node::StatementList(Vec::new())),
             ),
         ),
@@ -127,8 +136,9 @@ fn check_object_setter() {
         };
         ",
         &[Node::ConstDecl(vec![(
-            String::from("x"),
+            int.get_or_intern("x"),
             Node::Object(object_properties),
         )])],
+        int,
     );
 }

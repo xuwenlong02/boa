@@ -143,9 +143,10 @@ impl TokenParser for FunctionRestParameter {
             if let TokenKind::Identifier(name) = token.kind {
                 name
             } else {
-                return Err(ParseError::Expected(
+                return Err(ParseError::expected(
                     vec![String::from("identifier")],
-                    token.clone(),
+                    token.display(interner).to_string(),
+                    token.pos,
                     "rest parameter",
                 ));
             },
@@ -195,9 +196,10 @@ impl TokenParser for FormalParameter {
         let name = if let TokenKind::Identifier(name) = token.kind {
             name
         } else {
-            return Err(ParseError::Expected(
+            return Err(ParseError::expected(
                 vec![String::from("identifier")],
-                token.clone(),
+                token.display(interner).to_string(),
+                token.pos,
                 "formal parameter",
             ));
         };

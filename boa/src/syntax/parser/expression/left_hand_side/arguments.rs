@@ -62,7 +62,11 @@ impl TokenParser for Arguments {
                 TokenKind::Punctuator(Punctuator::CloseParen) => break,
                 TokenKind::Punctuator(Punctuator::Comma) => {
                     if args.is_empty() {
-                        return Err(ParseError::Unexpected(next_token.clone(), None));
+                        return Err(ParseError::unexpected(
+                            next_token.display(interner).to_string(),
+                            next_token.pos,
+                            None,
+                        ));
                     }
 
                     if cursor.next_if(Punctuator::CloseParen).is_some() {
@@ -71,12 +75,13 @@ impl TokenParser for Arguments {
                 }
                 _ => {
                     if !args.is_empty() {
-                        return Err(ParseError::Expected(
+                        return Err(ParseError::expected(
                             vec![
-                                TokenKind::Punctuator(Punctuator::Comma),
-                                TokenKind::Punctuator(Punctuator::CloseParen),
+                                Punctuator::Comma.to_string(),
+                                Punctuator::CloseParen.to_string(),
                             ],
-                            next_token.clone(),
+                            next_token.display(interner).to_string(),
+                            next_token.pos,
                             "argument list",
                         ));
                     } else {
