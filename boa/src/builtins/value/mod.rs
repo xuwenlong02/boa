@@ -5,13 +5,16 @@
 #[cfg(test)]
 mod tests;
 
-use crate::builtins::{
-    function::{Function, NativeFunction, NativeFunctionData},
-    object::{
-        internal_methods_trait::ObjectInternalMethods, InternalState, InternalStateCell, Object,
-        ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE,
+use crate::{
+    builtins::{
+        function::{Function, NativeFunction, NativeFunctionData},
+        object::{
+            internal_methods_trait::ObjectInternalMethods, InternalState, InternalStateCell,
+            Object, ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE,
+        },
+        property::Property,
     },
-    property::Property,
+    Interner, Sym,
 };
 use gc::{Gc, GcCell};
 use gc_derive::{Finalize, Trace};
@@ -46,7 +49,7 @@ pub enum ValueData {
     /// `boolean` - A `true` / `false` value, for if a certain criteria is met
     Boolean(bool),
     /// `String` - A UTF-8 string, such as `"Hello, world"`
-    String(String),
+    String(Sym), // TODO: maybe optimise with an `Option<Sym>` and treat `""` differently
     /// `Number` - A 64-bit floating point number, such as `3.1415`
     Number(f64),
     /// `Number` - A 32-bit integer, such as `42`
@@ -179,25 +182,27 @@ impl ValueData {
     /// Returns true if the value is true
     ///
     /// [toBoolean](https://tc39.es/ecma262/#sec-toboolean)
-    pub fn is_true(&self) -> bool {
+    pub fn is_true(&self, interner: &Interner) -> bool {
         match *self {
             Self::Object(_) => true,
-            Self::String(ref s) if !s.is_empty() => true,
-            Self::Number(n) if n != 0.0 && !n.is_nan() => true,
-            Self::Integer(n) if n != 0 => true,
+            Self::String(s) => !interner.resolve(s).expect("string disappeared").is_empty(),
+            Self::Number(n) => n != 0.0 && !n.is_nan(),
+            Self::Integer(n) => n != 0,
             Self::Boolean(v) => v,
             _ => false,
         }
     }
 
     /// Converts the value into a 64-bit floating point number
-    pub fn to_num(&self) -> f64 {
+    pub fn to_num(&self, interner: &Interner) -> f64 {
         match *self {
             Self::Object(_) | Self::Symbol(_) | Self::Undefined | Self::Function(_) => NAN,
-            Self::String(ref str) => match FromStr::from_str(str) {
-                Ok(num) => num,
-                Err(_) => NAN,
-            },
+            Self::String(s) => {
+                match FromStr::from_str(interner.resolve(s).expect("string disappeared")) {
+                    Ok(num) => num,
+                    Err(_) => NAN,
+                }
+            }
             Self::Number(num) => num,
             Self::Boolean(true) => 1.0,
             Self::Boolean(false) | Self::Null => 0.0,
@@ -206,7 +211,7 @@ impl ValueData {
     }
 
     /// Converts the value into a 32-bit integer
-    pub fn to_int(&self) -> i32 {
+    pub fn to_int(&self, interner: &Interner) -> i32 {
         match *self {
             Self::Object(_)
             | Self::Undefined
@@ -214,10 +219,12 @@ impl ValueData {
             | Self::Null
             | Self::Boolean(false)
             | Self::Function(_) => 0,
-            Self::String(ref str) => match FromStr::from_str(str) {
-                Ok(num) => num,
-                Err(_) => 0,
-            },
+            Self::String(s) => {
+                match FromStr::from_str(interner.resolve(s).expect("string disappeared")) {
+                    Ok(num) => num,
+                    Err(_) => 0,
+                }
+            }
             Self::Number(num) => num as i32,
             Self::Boolean(true) => 1,
             Self::Integer(num) => num,
@@ -242,12 +249,15 @@ impl ValueData {
     /// Resolve the property in the object.
     ///
     /// A copy of the Property is returned.
-    pub fn get_prop(&self, field: &str) -> Option<Property> {
+    pub fn get_prop(&self, field: Sym, interner: &mut Interner) -> Option<Property> {
         // Spidermonkey has its own GetLengthProperty: https://searchfox.org/mozilla-central/source/js/src/vm/Interpreter-inl.h#154
         // This is only for primitive strings, String() objects have their lengths calculated in string.rs
-        if self.is_string() && field == "length" {
-            if let Self::String(ref s) = *self {
-                return Some(Property::default().value(to_value(s.len() as i32)));
+        if self.is_string() && field == interner.get_or_intern("length") {
+            // TODO: optimise by having "length" pre-saved
+            if let Self::String(s) = *self {
+                return Some(Property::default().value(to_value(
+                    interner.resolve(s).expect("string disappeared") as i32,
+                )));
             }
         }
 

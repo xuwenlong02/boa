@@ -43,9 +43,9 @@ pub struct Object {
     /// The type of the object.
     pub kind: ObjectKind,
     /// Intfiernal Slots
-    pub internal_slots: Box<HashMap<String, Value>>,
+    pub internal_slots: Box<HashMap<Sym, Value>>,
     /// Properties
-    pub properties: Box<HashMap<String, Property>>,
+    pub properties: Box<HashMap<Sym, Property>>,
     /// Symbol Properties
     pub sym_properties: Box<HashMap<i32, Property>>,
     /// Some rust object that stores internal state

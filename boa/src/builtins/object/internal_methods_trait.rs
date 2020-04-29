@@ -5,10 +5,13 @@
 //!
 //! [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots
 
-use crate::builtins::{
-    object::{Object, PROTOTYPE},
-    property::Property,
-    value::{to_value, Value, ValueData},
+use crate::{
+    builtins::{
+        object::{Object, PROTOTYPE},
+        property::Property,
+        value::{to_value, Value, ValueData},
+    },
+    Interner, Sym,
 };
 use gc::Gc;
 use std::borrow::Borrow;
@@ -30,11 +33,11 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-hasproperty-p
-    fn has_property(&self, val: &Value) -> bool {
+    fn has_property(&self, val: &Value, interner: &mut Interner) -> bool {
         debug_assert!(Property::is_property_key(val));
         let prop = self.get_own_property(val);
         if prop.value.is_none() {
-            let parent: Value = self.get_prototype_of();
+            let parent: Value = self.get_prototype_of(interner);
             if !parent.is_null() {
                 // the parent value variant should be an object
                 // In the unlikely event it isn't return false
@@ -55,8 +58,9 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-isextensible
-    fn is_extensible(&self) -> bool {
-        let val = self.get_internal_slot("extensible");
+    fn is_extensible(&self, interner: &mut Interner) -> bool {
+        // TODO: optimise by pre-saving "extensible".
+        let val = self.get_internal_slot(interner.get_or_intern("extensible"));
         match *val.deref().borrow() {
             ValueData::Boolean(b) => b,
             _ => false,
@@ -69,8 +73,9 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-preventextensions
-    fn prevent_extensions(&mut self) -> bool {
-        self.set_internal_slot("extensible", to_value(false));
+    fn prevent_extensions(&mut self, interner: &mut Interner) -> bool {
+        // TODO: optimise by pre-saving "extensible".
+        self.set_internal_slot(interner.get_or_intern("extensible"), to_value(false));
         true
     }
 
@@ -87,7 +92,7 @@ pub trait ObjectInternalMethods {
             return true;
         }
         if desc.configurable.expect("unable to get value") {
-            self.remove_property(&prop_key.to_string());
+            self.remove_property(prop_key);
             return true;
         }
 
@@ -156,7 +161,7 @@ pub trait ObjectInternalMethods {
 
             // Change value on the current descriptor
             own_desc = own_desc.value(val);
-            return self.define_own_property(field.to_string(), own_desc);
+            return self.define_own_property(field, own_desc);
         }
         // [4]
         debug_assert!(own_desc.is_accessor_descriptor());
@@ -177,18 +182,19 @@ pub trait ObjectInternalMethods {
 
     /// Returns either the prototype or null
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof
-    fn get_prototype_of(&self) -> Value {
-        self.get_internal_slot(PROTOTYPE)
+    fn get_prototype_of(&self, interner: &Interner) -> Value {
+        // TODO: optimise by pre-saving the string symbol
+        self.get_internal_slot(interner.get_or_intern(PROTOTYPE))
     }
 
-    fn define_own_property(&mut self, property_key: String, desc: Property) -> bool;
+    fn define_own_property(&mut self, property_key: Sym, desc: Property) -> bool;
 
     /// Utility function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: &str) -> Value;
+    fn get_internal_slot(&self, name: Sym) -> Value;
 
-    fn set_internal_slot(&mut self, name: &str, val: Value);
+    fn set_internal_slot(&mut self, name: Sym, val: Value);
 
-    fn insert_property(&mut self, name: String, p: Property);
+    fn insert_property(&mut self, name: Sym, p: Property);
 
-    fn remove_property(&mut self, name: &str);
+    fn remove_property(&mut self, name: Sym);
 }
