@@ -59,10 +59,7 @@
       "command": "cargo",
       "args": ["test", "--no-run"],
       "problemMatcher": ["$rustc"],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
+      "group": "build"
     }
   ]
 }

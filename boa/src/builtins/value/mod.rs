@@ -213,7 +213,7 @@ impl ValueData {
             | Self::Symbol(_)
             | Self::Undefined
             | Self::Function(_)
-            | FunctionObj(_) => NAN,
+            | Self::FunctionObj(_) => NAN,
             Self::String(ref str) => match FromStr::from_str(str) {
                 Ok(num) => num,
                 Err(_) => NAN,
@@ -648,7 +648,7 @@ impl ValueData {
             Self::Symbol(_) => "symbol",
             Self::Null => "null",
             Self::Undefined => "undefined",
-            Self::Function(_) | FunctionObj(_) => "function",
+            Self::Function(_) | Self::FunctionObj(_) => "function",
             Self::Object(ref o) => {
                 if o.deref().borrow().get_internal_slot("call").is_null() {
                     "object"
@@ -882,7 +882,7 @@ impl Display for ValueData {
             ),
             Self::Object(_) => write!(f, "{}", log_string_from(self, true)),
             Self::Integer(v) => write!(f, "{}", v),
-            FunctionObj(_) => write!(f, "{}", v),
+            Self::FunctionObj(_) => write!(f, "[unimplemented]"),
             Self::Function(ref v) => match *v.borrow() {
                 Function::NativeFunc(_) => write!(f, "function() {{ [native code] }}"),
                 Function::RegularFunc(ref rf) => {

@@ -1,3 +1,16 @@
+//! This module implements the global `Function` object as well as creates Native Functions.
+//!
+//! Objects wrap `Function`s and expose them via call/construct slots.
+//!
+//! `The `Function` object is used for matching text with a pattern.
+//!
+//! More information:
+//!  - [ECMAScript reference][spec]
+//!  - [MDN documentation][mdn]
+//!
+//! [spec]: https://tc39.es/ecma262/#sec-function-objects
+//! [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function
+
 use crate::{
     builtins::{
         array,
@@ -132,67 +145,118 @@ impl Function {
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
-        // Is this a builtin function?
-        if let FunctionKind::BuiltIn = self.kind {
-            return self.call_builtin(this, args_list, interpreter);
-        };
+        match self.kind {
+            FunctionKind::BuiltIn => match &self.body {
+                FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
+                FunctionBody::Ordinary(_) => {
+                    panic!("Builtin function should not have Ordinary Function body")
+                }
+            },
+            FunctionKind::Ordinary => {
+                // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
+                // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+                let local_env = new_function_environment(
+                    this.clone(),
+                    undefined(),
+                    Some(self.environment.as_ref().unwrap().clone()),
+                );
 
-        // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
-        // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
-        let local_env = new_function_environment(
-            this.clone(),
-            undefined(),
-            Some(self.environment.as_ref().unwrap().clone()),
-        );
+                // Add argument bindings to the function environment
+                for i in 0..self.params.len() {
+                    let param = self.params.get(i).expect("Could not get param");
+                    // Rest Parameters
+                    if param.is_rest_param {
+                        self.add_rest_param(param, i, args_list, interpreter, &local_env);
+                        break;
+                    }
 
-        // Add argument bindings to the function environment
-        for i in 0..self.params.len() {
-            let param = self.params.get(i).expect("Could not get param");
-            // Rest Parameters
-            if param.is_rest_param {
-                self.add_rest_param(param, i, args_list, interpreter, &local_env);
-                break;
+                    let value = args_list.get(i).expect("Could not get value");
+                    self.add_arguments_to_environment(param, value.clone(), &local_env);
+                }
+
+                // Add arguments object
+                let arguments_obj = create_unmapped_arguments_object(args_list);
+                local_env
+                    .borrow_mut()
+                    .create_mutable_binding("arguments".to_string(), false);
+                local_env
+                    .borrow_mut()
+                    .initialize_binding("arguments", arguments_obj);
+
+                interpreter.realm.environment.push(local_env);
+
+                // Call body should be set before reaching here
+                let result = match &self.body {
+                    FunctionBody::Ordinary(ref body) => interpreter.run(body),
+                    _ => panic!("Ordinary function should not have BuiltIn Function body"),
+                };
+
+                // local_env gets dropped here, its no longer needed
+                interpreter.realm.environment.pop();
+                result
             }
-
-            let value = args_list.get(i).expect("Could not get value");
-            self.add_arguments_to_environment(param, value.clone(), &local_env);
         }
-
-        // Add arguments object
-        let arguments_obj = create_unmapped_arguments_object(args_list);
-        local_env
-            .borrow_mut()
-            .create_mutable_binding("arguments".to_string(), false);
-        local_env
-            .borrow_mut()
-            .initialize_binding("arguments", arguments_obj);
-
-        interpreter.realm.environment.push(local_env);
-
-        // Call body should be set before reaching here
-        let result = match &self.body {
-            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
-            FunctionBody::Ordinary(ref body) => interpreter.run(body),
-        };
-
-        // local_env gets dropped here, its no longer needed
-        interpreter.realm.environment.pop();
-        result
     }
 
-    /// Call a builtin function
-    fn call_builtin(
+    pub fn construct(
         &self,
         this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
+        this_obj: &Value,
     ) -> ResultValue {
-        match &self.body {
-            FunctionBody::BuiltIn(func) => func(this, args_list, interpreter),
-            FunctionBody::Ordinary(_) => panic!("Ordinary function expected"),
+        match self.kind {
+            FunctionKind::BuiltIn => match &self.body {
+                FunctionBody::BuiltIn(func) => func(this_obj, args_list, interpreter),
+                FunctionBody::Ordinary(_) => {
+                    panic!("Builtin function should not have Ordinary Function body")
+                }
+            },
+            FunctionKind::Ordinary => {
+                // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
+                // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+                let local_env = new_function_environment(
+                    this.clone(),
+                    this_obj.clone(),
+                    Some(self.environment.as_ref().unwrap().clone()),
+                );
+
+                // Add argument bindings to the function environment
+                for i in 0..self.params.len() {
+                    let param = self.params.get(i).expect("Could not get param");
+                    // Rest Parameters
+                    if param.is_rest_param {
+                        self.add_rest_param(param, i, args_list, interpreter, &local_env);
+                        break;
+                    }
+
+                    let value = args_list.get(i).expect("Could not get value");
+                    self.add_arguments_to_environment(param, value.clone(), &local_env);
+                }
+
+                // Add arguments object
+                let arguments_obj = create_unmapped_arguments_object(args_list);
+                local_env
+                    .borrow_mut()
+                    .create_mutable_binding("arguments".to_string(), false);
+                local_env
+                    .borrow_mut()
+                    .initialize_binding("arguments", arguments_obj);
+
+                interpreter.realm.environment.push(local_env);
+
+                // Call body should be set before reaching here
+                let result = match &self.body {
+                    FunctionBody::Ordinary(ref body) => interpreter.run(body),
+                    _ => panic!("Ordinary function should not have BuiltIn Function body"),
+                };
+
+                // local_env gets dropped here, its no longer needed
+                interpreter.realm.environment.pop();
+                result
+            }
         }
     }
-
     // Adds the final rest parameters to the Environment as an array
     fn add_rest_param(
         &self,

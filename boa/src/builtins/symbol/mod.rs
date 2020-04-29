@@ -107,12 +107,7 @@ pub fn create_constructor(global: &Value) -> Value {
     symbol_prototype.set_method("toString", to_string);
 
     let symbol_prototype_val = to_value(symbol_prototype);
-
-    // Create Symbol constructor (or function in Symbol's case)
-    // let mut symbol_constructor =
-    //     Function::create_builtin(symbol_prototype_val.clone(), vec![], ThisMode::NonLexical);
-    let mut symbol_constructor = Object::function();
-    symbol_constructor.set_call(FunctionBody::BuiltIn(call_symbol));
+    let constructor = create_constructor_fn!(call_symbol);
 
     symbol_constructor.set_call_body();
     symbol_constructor.set_construct_body(FunctionBody::BuiltIn(call_symbol));
