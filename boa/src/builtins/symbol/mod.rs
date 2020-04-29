@@ -20,7 +20,6 @@ mod tests;
 
 use crate::{
     builtins::{
-        function_object::{Function, FunctionBody, ThisMode},
         object::{
             internal_methods_trait::ObjectInternalMethods, Object, ObjectKind, INSTANCE_PROTOTYPE,
             PROTOTYPE,
@@ -42,7 +41,7 @@ use rand::random;
 /// - [ECMAScript reference][spec]
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-symbol-description
-pub fn call_symbol(_: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
+pub fn call_symbol(_: &mut Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
     // From an implementation and specificaition perspective Symbols are similar to Objects.
     // They have internal slots to hold the SymbolData and Description, they also have methods and a prototype.
     // So we start by creating an Object
@@ -80,7 +79,7 @@ pub fn call_symbol(_: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultVa
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-symbol.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toString
-pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn to_string(this: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     let s: Value = this.get_internal_slot("Description");
     let full_string = format!(r#"Symbol({})"#, s.to_string());
     Ok(to_value(full_string))
@@ -97,26 +96,8 @@ pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue 
 /// [spec]: https://tc39.es/ecma262/#sec-symbol-constructor
 /// [mdn]:
 pub fn create_constructor(global: &Value) -> Value {
-    // Create prototype
-    let mut symbol_prototype = Object::default();
-
-    // Symbol.prototype[[Prototype]] points to Object.prototype
-    // Symbol Constructor -> Symbol Prototype -> Object Prototype
-    let object_prototype = global.get_field_slice("Object").get_field_slice(PROTOTYPE);
-    symbol_prototype.set_internal_slot(INSTANCE_PROTOTYPE, object_prototype);
-    symbol_prototype.set_method("toString", to_string);
-
-    let symbol_prototype_val = to_value(symbol_prototype);
-    let constructor = create_constructor_fn!(call_symbol);
-
-    symbol_constructor.set_call_body();
-    symbol_constructor.set_construct_body(FunctionBody::BuiltIn(call_symbol));
-
-    // Symbol.prototype[[Prototype]] points to Object.prototype
-    // Symbol Constructor -> Symbol Prototype -> Object Prototype
-
-    let symbol_constructor_value = to_value(symbol_constructor);
-    symbol_prototype_val.set_field_slice("constructor", symbol_constructor_value.clone());
-
-    symbol_constructor_value
+    // Create prototype object
+    let proto = ValueData::new_obj(Some(global));
+    make_builtin_fn!(to_string, named "toString", of proto);
+    make_constructor_fn!(call_symbol, global, proto)
 }

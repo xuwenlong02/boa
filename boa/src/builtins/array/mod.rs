@@ -14,8 +14,7 @@ mod tests;
 
 use crate::{
     builtins::{
-        function::NativeFunctionData,
-        object::{Object, ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE},
+        object::{Object, ObjectInternalMethods, ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE},
         property::Property,
         value::{from_value, to_value, undefined, ResultValue, Value, ValueData},
     },
@@ -97,7 +96,7 @@ pub(crate) fn add_to_array_object(array_ptr: &Value, add_values: &[Value]) -> Re
 }
 
 /// Create a new array
-pub fn make_array(this: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
+pub fn make_array(this: &mut Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
     // Make a new Object which will internally represent the Array (mapping
     // between indices and values): this creates an Object with no prototype
 
@@ -141,7 +140,7 @@ pub fn make_array(this: &Value, args: &[Value], ctx: &mut Interpreter) -> Result
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.isarray
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray
-pub fn is_array(_this: &Value, args: &[Value], _interpreter: &mut Interpreter) -> ResultValue {
+pub fn is_array(_this: &mut Value, args: &[Value], _interpreter: &mut Interpreter) -> ResultValue {
     let value_true = Gc::new(ValueData::Boolean(true));
     let value_false = Gc::new(ValueData::Boolean(false));
 
@@ -176,7 +175,7 @@ pub fn is_array(_this: &Value, args: &[Value], _interpreter: &mut Interpreter) -
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.concat
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/concat
-pub fn concat(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn concat(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         // If concat is called with no arguments, it returns the original array
         return Ok(this.clone());
@@ -215,7 +214,7 @@ pub fn concat(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue 
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.push
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push
-pub fn push(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn push(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let new_array = add_to_array_object(this, args)?;
     Ok(new_array.get_field_slice("length"))
 }
@@ -230,7 +229,7 @@ pub fn push(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.pop
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/pop
-pub fn pop(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn pop(this: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     let curr_length: i32 =
         from_value(this.get_field_slice("length")).expect("Could not convert argument to i32");
     if curr_length < 1 {
@@ -253,7 +252,7 @@ pub fn pop(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.foreach
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/forEach
-pub fn for_each(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn for_each(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "Missing argument for Array.prototype.forEach".to_string(),
@@ -288,7 +287,7 @@ pub fn for_each(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> 
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.join
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/join
-pub fn join(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn join(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let separator = if args.is_empty() {
         String::from(",")
     } else {
@@ -318,7 +317,7 @@ pub fn join(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/toString
-pub fn to_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_string(this: &mut Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let method_name = "join";
     let mut arguments = vec![to_value(",")];
     // 2.
@@ -360,7 +359,7 @@ pub fn to_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> Resul
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.reverse
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse
 #[allow(clippy::else_if_without_else)]
-pub fn reverse(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn reverse(this: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     let len: i32 =
         from_value(this.get_field_slice("length")).expect("Could not convert argument to i32");
     let middle: i32 = len.wrapping_div(2);
@@ -399,7 +398,7 @@ pub fn reverse(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.shift
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift
-pub fn shift(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn shift(this: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     let len: i32 =
         from_value(this.get_field_slice("length")).expect("Could not convert argument to i32");
 
@@ -442,7 +441,7 @@ pub fn shift(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.unshift
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift
-pub fn unshift(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn unshift(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let len: i32 =
         from_value(this.get_field_slice("length")).expect("Could not convert argument to i32");
     let arg_c: i32 = args.len() as i32;
@@ -487,7 +486,7 @@ pub fn unshift(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.every
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/every
-pub fn every(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn every(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "missing callback when calling function Array.prototype.every".to_string(),
@@ -526,7 +525,7 @@ pub fn every(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Res
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.map
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map
-pub fn map(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn map(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "missing argument 0 when calling function Array.prototype.map",
@@ -575,7 +574,7 @@ pub fn map(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Resul
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.indexof
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf
-pub fn index_of(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn index_of(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     // If no arguments, return -1. Not described in spec, but is what chrome does.
     if args.is_empty() {
         return Ok(to_value(-1));
@@ -630,7 +629,7 @@ pub fn index_of(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValu
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.lastindexof
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/lastIndexOf
-pub fn last_index_of(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn last_index_of(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     // If no arguments, return -1. Not described in spec, but is what chrome does.
     if args.is_empty() {
         return Ok(to_value(-1));
@@ -679,7 +678,7 @@ pub fn last_index_of(this: &Value, args: &[Value], _: &mut Interpreter) -> Resul
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.find
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find
-pub fn find(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn find(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "missing callback when calling function Array.prototype.find".to_string(),
@@ -715,7 +714,7 @@ pub fn find(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Resu
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.findindex
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/findIndex
-pub fn find_index(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn find_index(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "Missing argument for Array.prototype.findIndex".to_string(),
@@ -757,7 +756,7 @@ pub fn find_index(this: &Value, args: &[Value], interpreter: &mut Interpreter) -
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.fill
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/fill
-pub fn fill(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn fill(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let len: i32 = from_value(this.get_field_slice("length")).expect("Could not get argument");
     let default_value = undefined();
     let value = args.get(0).unwrap_or(&default_value);
@@ -796,7 +795,7 @@ pub fn fill(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.includes
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/includes
-pub fn includes_value(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn includes_value(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let search_element = args
         .get(0)
         .cloned()
@@ -830,7 +829,7 @@ pub fn includes_value(this: &Value, args: &[Value], _: &mut Interpreter) -> Resu
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.slice
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
-pub fn slice(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn slice(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     let new_array = new_array(interpreter)?;
     let len: i32 =
         from_value(this.get_field_slice("length")).expect("Could not convert argument to i32");
@@ -879,7 +878,7 @@ pub fn slice(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Res
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.filter
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter
-pub fn filter(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn filter(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "missing argument 0 when calling function Array.prototype.filter",
@@ -930,7 +929,7 @@ pub fn filter(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Re
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-array.prototype.some
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/some
-pub fn some(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
+pub fn some(this: &mut Value, args: &[Value], interpreter: &mut Interpreter) -> ResultValue {
     if args.is_empty() {
         return Err(to_value(
             "missing callback when calling function Array.prototype.some".to_string(),
@@ -961,14 +960,6 @@ pub fn some(this: &Value, args: &[Value], interpreter: &mut Interpreter) -> Resu
 
 /// Create a new `Array` object.
 pub fn create_constructor(global: &Value) -> Value {
-    // Create Constructor
-    let object_prototype = global.get_field_slice("Object").get_field_slice(PROTOTYPE);
-    let mut array_constructor = Object::create(object_prototype);
-    array_constructor.kind = ObjectKind::Function;
-    array_constructor.set_internal_method("construct", make_array);
-    // Todo: add call function
-    array_constructor.set_internal_method("call", make_array);
-
     // Create prototype
     let array_prototype = ValueData::new_obj(None);
     let length = Property::default().value(to_value(0_i32));
@@ -995,10 +986,9 @@ pub fn create_constructor(global: &Value) -> Value {
     make_builtin_fn!(slice, named "slice", with length 2, of array_prototype);
     make_builtin_fn!(some, named "some", with length 2, of array_prototype);
 
-    let array = to_value(array_constructor);
+    let array = make_constructor_fn!(make_array, make_array, global, array_prototype);
+    // Static Methods
     make_builtin_fn!(is_array, named "isArray", with length 1, of array);
-    array.set_field_slice(PROTOTYPE, to_value(array_prototype.clone()));
 
-    array_prototype.set_field_slice("constructor", array.clone());
     array
 }

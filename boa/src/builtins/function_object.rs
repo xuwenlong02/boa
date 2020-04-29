@@ -28,7 +28,7 @@ use gc_derive::{Finalize, Trace};
 use std::fmt::{self, Debug};
 
 /// _fn(this, arguments, ctx) -> ResultValue_ - The signature of a built-in function
-pub type NativeFunctionData = fn(&Value, &[Value], &mut Interpreter) -> ResultValue;
+pub type NativeFunctionData = fn(&mut Value, &[Value], &mut Interpreter) -> ResultValue;
 
 /// Sets the ConstructorKind
 #[derive(Debug, Copy, Clone)]
@@ -52,8 +52,17 @@ pub enum FunctionBody {
     Ordinary(Node),
 }
 
+impl Debug for FunctionBody {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FunctionBody::BuiltIn(_) => write!(f, "native code"),
+            FunctionBody::Ordinary(node) => write!(f, "{}", node),
+        }
+    }
+}
+
 /// Signal what sort of function this is
-#[derive(Clone, Trace, Finalize)]
+#[derive(Clone, Trace, Debug, Finalize)]
 pub enum FunctionKind {
     BuiltIn,
     Ordinary,
@@ -89,20 +98,12 @@ impl Function {
     ///
     /// <https://tc39.es/ecma262/#sec-ordinaryfunctioncreate>
     pub fn create_ordinary(
-        proto: Value,
         parameter_list: Vec<FormalParameter>,
         scope: Environment,
         body: FunctionBody,
         this_mode: ThisMode,
     ) -> Function {
-        // Create length property and set it's value
-        let length_property = Property::new()
-            .writable(false)
-            .enumerable(false)
-            .configurable(true)
-            .value(to_value(parameter_list.len()));
-
-        let mut func = Function {
+        let func = Function {
             body,
             environment: Some(scope),
             params: parameter_list,
@@ -117,13 +118,6 @@ impl Function {
     ///
     /// <https://tc39.es/ecma262/#sec-createbuiltinfunction>
     pub fn create_builtin(parameter_list: Vec<FormalParameter>, body: FunctionBody) -> Function {
-        // Create length property and set it's value
-        let length_property = Property::new()
-            .writable(false)
-            .enumerable(false)
-            .configurable(true)
-            .value(to_value(parameter_list.len()));
-
         let func: Function = Function {
             body,
             params: parameter_list,
@@ -141,7 +135,7 @@ impl Function {
     /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-call-thisargument-argumentslist>
     pub fn call(
         &self,
-        this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
+        this: &mut Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
     ) -> ResultValue {
@@ -200,10 +194,10 @@ impl Function {
 
     pub fn construct(
         &self,
-        this: &Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
+        this: &mut Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
         args_list: &Vec<Value>,
         interpreter: &mut Interpreter,
-        this_obj: &Value,
+        this_obj: &mut Value,
     ) -> ResultValue {
         match self.kind {
             FunctionKind::BuiltIn => match &self.body {

@@ -6,9 +6,9 @@
 use crate::{
     builtins::{
         array, boolean, console, function,
-        function::NativeFunctionData,
+        function_object::NativeFunctionData,
         json, math, number, object, regexp, string, symbol,
-        value::{ToValue, Value, ValueData},
+        value::{to_value, ToValue, Value, ValueData},
     },
     environment::{
         declarative_environment_record::DeclarativeEnvironmentRecord,
@@ -70,8 +70,12 @@ impl Realm {
 
     /// Utility to add a function to the global object
     pub fn register_global_func(self, func_name: &str, func: NativeFunctionData) -> Self {
+        let func = crate::builtins::function_object::Function::create_builtin(
+            vec![],
+            crate::builtins::function_object::FunctionBody::BuiltIn(func),
+        );
         self.global_obj
-            .set_field(func_name.to_value(), func.to_value());
+            .set_field(func_name.to_value(), to_value(func));
 
         self
     }

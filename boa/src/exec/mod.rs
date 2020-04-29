@@ -8,10 +8,7 @@ use crate::{
         array,
         function::{create_unmapped_arguments_object, Function, RegularFunction},
         function_object::{Function as FunctionObject, FunctionBody, ThisMode},
-        object::{
-            internal_methods_trait::ObjectInternalMethods, ObjectKind, INSTANCE_PROTOTYPE,
-            PROTOTYPE,
-        },
+        object::{Object, ObjectKind, INSTANCE_PROTOTYPE, PROTOTYPE},
         value::{from_value, to_value, ResultValue, Value, ValueData},
     },
     environment::lexical_environment::{
@@ -261,23 +258,24 @@ impl Executor for Interpreter {
             // <https://tc39.es/ecma262/#sec-createdynamicfunction>
             Node::FunctionDecl(ref name, ref args, ref expr) => {
                 // Todo: Function.prototype doesn't exist yet, so the prototype right now is the Object.prototype
-                let proto = &self
-                    .realm
-                    .environment
-                    .get_global_object()
-                    .expect("Could not get the global object")
-                    .get_field_slice("Object")
-                    .get_field_slice("Prototype");
+                // let proto = &self
+                //     .realm
+                //     .environment
+                //     .get_global_object()
+                //     .expect("Could not get the global object")
+                //     .get_field_slice("Object")
+                //     .get_field_slice("Prototype");
 
-                let mut func = FunctionObject::create_ordinary(
-                    proto.clone(),
+                let func = FunctionObject::create_ordinary(
                     args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
                     self.realm.environment.get_current_environment().clone(),
                     FunctionBody::Ordinary(*expr.clone()),
                     ThisMode::Lexical,
                 );
 
-                let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
+                let mut new_func = Object::function();
+                new_func.set_call(func);
+                let val = to_value(new_func);
 
                 // Set the name and assign it in the current environment
                 if name.is_some() {
@@ -419,12 +417,12 @@ impl Executor for Interpreter {
                     func_object.borrow().get_field_slice(PROTOTYPE),
                 );
 
-                match (*func_object).borrow() {
-                    ValueData::FunctionObj(func) => {
-                        func.borrow_mut()
-                            .deref_mut()
-                            .call(&func_object, &v_args, self)
-                    }
+                match *(func_object.borrow()).deref() {
+                    ValueData::Object(ref o) => (*o.deref().borrow_mut())
+                        .construct
+                        .as_ref()
+                        .unwrap()
+                        .call(&mut func_object.clone(), &v_args, self),
                     ValueData::Function(ref inner_func) => match inner_func.clone().into_inner() {
                         Function::NativeFunc(ref ntv) => {
                             let func = ntv.data;
@@ -612,10 +610,14 @@ impl Interpreter {
         // During this transition call will support both native functions and function objects
         match (*f).deref() {
             ValueData::FunctionObj(func) => {
-                func.borrow_mut().deref_mut().call(f, &arguments_list, self)
+                func.borrow_mut()
+                    .deref_mut()
+                    .call(&mut f.clone(), &arguments_list, self)
             }
             ValueData::Object(ref obj) => match obj.borrow_mut().call {
-                Some(ref func) => return func.call(f, &arguments_list, self),
+                Some(ref func) => {
+                    return func.call(&mut f.clone(), &arguments_list, self);
+                }
                 None => panic!("Expected function"),
             },
             ValueData::Function(ref inner_func) => match *inner_func.deref().borrow() {

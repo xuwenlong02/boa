@@ -15,7 +15,7 @@
 
 use crate::{
     builtins::{
-        function_object::{Function, NativeFunctionData},
+        function_object::Function,
         property::Property,
         value::{from_value, same_value, to_value, ResultValue, Value, ValueData},
     },
@@ -372,19 +372,6 @@ impl Object {
         self.construct = Some(val);
     }
 
-    /// Utility function to set an internal slot which is a function
-    pub fn set_internal_method(&mut self, name: &str, val: NativeFunctionData) {
-        self.internal_slots.insert(name.to_string(), to_value(val));
-    }
-
-    /// Utility function to set a method on this object.
-    ///
-    /// The native function will live in the `properties` field of the Object.
-    pub fn set_method(&mut self, name: &str, val: NativeFunctionData) {
-        self.properties
-            .insert(name.to_string(), Property::default().value(to_value(val)));
-    }
-
     /// Return a new Boolean object whose `[[BooleanData]]` internal slot is set to argument.
     fn from_boolean(argument: &Value) -> Self {
         let mut obj = Self {
@@ -467,18 +454,18 @@ pub enum ObjectKind {
 }
 
 /// Create a new object.
-pub fn make_object(_: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn make_object(_: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     Ok(Gc::new(ValueData::Undefined))
 }
 
 /// Get the `prototype` of an object.
-pub fn get_proto_of(_: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn get_proto_of(_: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let obj = args.get(0).expect("Cannot get object");
     Ok(obj.get_field_slice(INSTANCE_PROTOTYPE))
 }
 
 /// Set the `prototype` of an object.
-pub fn set_proto_of(_: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn set_proto_of(_: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let obj = args.get(0).expect("Cannot get object").clone();
     let proto = args.get(1).expect("Cannot get object").clone();
     obj.set_internal_slot(INSTANCE_PROTOTYPE, proto);
@@ -486,7 +473,7 @@ pub fn set_proto_of(_: &Value, args: &[Value], _: &mut Interpreter) -> ResultVal
 }
 
 /// Define a property in an object
-pub fn define_prop(_: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn define_prop(_: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let obj = args.get(0).expect("Cannot get object");
     let prop = from_value::<String>(args.get(1).expect("Cannot get object").clone())
         .expect("Cannot get object");
@@ -506,7 +493,7 @@ pub fn define_prop(_: &Value, args: &[Value], _: &mut Interpreter) -> ResultValu
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-object.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString
-pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn to_string(this: &mut Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     Ok(to_value(this.to_string()))
 }
 
@@ -521,7 +508,7 @@ pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue 
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-object.prototype.hasownproperty
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwnProperty
-pub fn has_own_prop(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn has_own_prop(this: &mut Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
     let prop = if args.is_empty() {
         None
     } else {
@@ -534,14 +521,22 @@ pub fn has_own_prop(this: &Value, args: &[Value], _: &mut Interpreter) -> Result
 
 /// Create a new `Object` object.
 pub fn create_constructor(_: &Value) -> Value {
-    let object = to_value(make_object as NativeFunctionData);
+    let mut constructor_obj = Object::function();
+    // Create the native function
+    let constructor_fn = crate::builtins::function_object::Function::create_builtin(
+        vec![],
+        crate::builtins::function_object::FunctionBody::BuiltIn(make_object),
+    );
+    constructor_obj.set_construct(constructor_fn);
+    let object = to_value(constructor_obj);
     // Prototype chain ends here VV
-    let mut prototype = Object::default();
-    prototype.set_method("hasOwnProperty", has_own_prop);
-    prototype.set_method("toString", to_string);
+    let prototype = to_value(Object::default());
+    object.set_field_slice(PROTOTYPE, prototype.clone());
+
+    make_builtin_fn!(has_own_prop, named "hasOwnProperty", of prototype);
+    make_builtin_fn!(to_string, named "toString", of prototype);
 
     object.set_field_slice("length", to_value(1_i32));
-    object.set_field_slice(PROTOTYPE, to_value(prototype));
     make_builtin_fn!(set_proto_of, named "setPrototypeOf", with length 2, of object);
     make_builtin_fn!(get_proto_of, named "getPrototypeOf", with length 1, of object);
     make_builtin_fn!(define_prop, named "defineProperty", with length 3, of object);

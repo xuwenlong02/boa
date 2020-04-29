@@ -6,7 +6,7 @@
 mod tests;
 
 use crate::builtins::{
-    function::{Function, NativeFunction, NativeFunctionData},
+    function::Function,
     function_object::Function as FunctionObj,
     object::{
         internal_methods_trait::ObjectInternalMethods, InternalState, InternalStateCell, Object,
@@ -119,8 +119,10 @@ impl ValueData {
     /// Returns true if the value is a function
     pub fn is_function(&self) -> bool {
         match *self {
-            Self::Function(_) => true,
-            Self::Object(ref o) => o.deref().borrow().get_internal_slot("call").is_function(),
+            Self::Object(ref o) => {
+                let borrowed_obj = o.borrow();
+                borrowed_obj.call.is_some() || borrowed_obj.construct.is_some()
+            }
             _ => false,
         }
     }
@@ -532,11 +534,10 @@ impl ValueData {
     }
 
     /// Set the kind of an object
-    pub fn set_kind(&self, kind: ObjectKind) -> ObjectKind {
+    pub fn set_kind(&self, kind: ObjectKind) {
         if let Self::Object(ref obj) = *self {
-            obj.borrow_mut().kind = kind.clone();
+            (*obj.deref().borrow_mut()).kind = kind.clone();
         }
-        kind
     }
 
     /// Set the property in the value
@@ -1197,25 +1198,6 @@ impl<T: FromValue> FromValue for Option<T> {
         } else {
             Some(FromValue::from_value(value)?)
         })
-    }
-}
-
-impl ToValue for NativeFunctionData {
-    fn to_value(&self) -> Value {
-        Gc::new(ValueData::Function(Box::new(GcCell::new(
-            Function::NativeFunc(NativeFunction::new(*self)),
-        ))))
-    }
-}
-impl FromValue for NativeFunctionData {
-    fn from_value(v: Value) -> Result<Self, &'static str> {
-        match *v {
-            ValueData::Function(ref func) => match *func.borrow() {
-                Function::NativeFunc(ref data) => Ok(data.data),
-                _ => Err("Value is not a native function"),
-            },
-            _ => Err("Value is not a function"),
-        }
     }
 }
 

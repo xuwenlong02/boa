@@ -18,8 +18,7 @@ mod tests;
 
 use crate::{
     builtins::{
-        function::NativeFunctionData,
-        object::{internal_methods_trait::ObjectInternalMethods, Object, ObjectKind, PROTOTYPE},
+        object::{internal_methods_trait::ObjectInternalMethods, Object, PROTOTYPE},
         value::{to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
@@ -61,7 +60,7 @@ fn num_to_exponential(n: f64) -> String {
 }
 
 /// Create a new number `[[Construct]]`
-pub fn make_number(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn make_number(this: &mut Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let data = match args.get(0) {
         Some(ref value) => to_number(value),
         None => to_number(&to_value(0)),
@@ -73,7 +72,7 @@ pub fn make_number(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> Resu
 /// `Number()` function.
 ///
 /// More Information https://tc39.es/ecma262/#sec-number-constructor-number-value
-pub fn call_number(_this: &Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn call_number(_this: &mut Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let data = match args.get(0) {
         Some(ref value) => to_number(value),
         None => to_number(&to_value(0)),
@@ -91,7 +90,7 @@ pub fn call_number(_this: &Value, args: &[Value], _ctx: &mut Interpreter) -> Res
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.toexponential
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toExponential
-pub fn to_exponential(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_exponential(this: &mut Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let this_num = to_number(this).to_num();
     let this_str_num = num_to_exponential(this_num);
     Ok(to_value(this_str_num))
@@ -107,7 +106,7 @@ pub fn to_exponential(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> 
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.tofixed
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toFixed
-pub fn to_fixed(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_fixed(this: &mut Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let this_num = to_number(this).to_num();
     let precision = match args.get(0) {
         Some(n) => match n.to_int() {
@@ -133,7 +132,7 @@ pub fn to_fixed(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> ResultV
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.tolocalestring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toLocaleString
-pub fn to_locale_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_locale_string(this: &mut Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let this_num = to_number(this).to_num();
     let this_str_num = format!("{}", this_num);
     Ok(to_value(this_str_num))
@@ -149,7 +148,7 @@ pub fn to_locale_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.toexponential
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toPrecision
-pub fn to_precision(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_precision(this: &mut Value, args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     let this_num = to_number(this);
     let _num_str_len = format!("{}", this_num.to_num()).len();
     let _precision = match args.get(0) {
@@ -173,7 +172,7 @@ pub fn to_precision(this: &Value, args: &[Value], _ctx: &mut Interpreter) -> Res
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/toString
-pub fn to_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn to_string(this: &mut Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     Ok(to_value(format!("{}", to_number(this).to_num())))
 }
 
@@ -187,20 +186,13 @@ pub fn to_string(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> Resul
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-number.prototype.valueof
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/valueOf
-pub fn value_of(this: &Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
+pub fn value_of(this: &mut Value, _args: &[Value], _ctx: &mut Interpreter) -> ResultValue {
     Ok(to_number(this))
 }
 
 /// Create a new `Number` object
 pub fn create_constructor(global: &Value) -> Value {
-    let mut number_constructor = Object::default();
-    number_constructor.kind = ObjectKind::Function;
-
-    number_constructor.set_internal_method("construct", make_number);
-    number_constructor.set_internal_method("call", call_number);
-
     let number_prototype = ValueData::new_obj(Some(global));
-
     number_prototype.set_internal_slot("NumberData", to_value(0));
 
     make_builtin_fn!(to_exponential, named "toExponential", with length 1, of number_prototype);
@@ -210,8 +202,5 @@ pub fn create_constructor(global: &Value) -> Value {
     make_builtin_fn!(to_string, named "toString", with length 1, of number_prototype);
     make_builtin_fn!(value_of, named "valueOf", of number_prototype);
 
-    let number = to_value(number_constructor);
-    number_prototype.set_field_slice("constructor", number.clone());
-    number.set_field_slice(PROTOTYPE, number_prototype);
-    number
+    make_constructor_fn!(make_number, call_number, global, number_prototype)
 }
