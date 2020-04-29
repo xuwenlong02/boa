@@ -273,11 +273,9 @@ impl Executor for Interpreter {
                     proto.clone(),
                     args.clone(), // TODO: args shouldn't need to be a reference it should be passed by value
                     self.realm.environment.get_current_environment().clone(),
+                    FunctionBody::Ordinary(*expr.clone()),
                     ThisMode::Lexical,
                 );
-
-                // Set the call body of this function
-                func.set_call_body(FunctionBody::Ordinary(*expr.clone()));
 
                 let val = Gc::new(ValueData::FunctionObj(GcCell::new(func)));
 
@@ -425,7 +423,7 @@ impl Executor for Interpreter {
                     ValueData::FunctionObj(func) => {
                         func.borrow_mut()
                             .deref_mut()
-                            .construct(&func_object, this, &v_args, self)
+                            .call(&func_object, &v_args, self)
                     }
                     ValueData::Function(ref inner_func) => match inner_func.clone().into_inner() {
                         Function::NativeFunc(ref ntv) => {
@@ -616,14 +614,10 @@ impl Interpreter {
             ValueData::FunctionObj(func) => {
                 func.borrow_mut().deref_mut().call(f, &arguments_list, self)
             }
-            ValueData::Object(ref obj) => {
-                let func: Value = obj.borrow_mut().deref_mut().get_internal_slot("call");
-                if !func.is_undefined() {
-                    return self.call(&func, v, arguments_list);
-                }
-                // TODO: error object should be here
-                Err(Gc::new(ValueData::Undefined))
-            }
+            ValueData::Object(ref obj) => match obj.borrow_mut().call {
+                Some(ref func) => return func.call(f, &arguments_list, self),
+                None => panic!("Expected function"),
+            },
             ValueData::Function(ref inner_func) => match *inner_func.deref().borrow() {
                 Function::NativeFunc(ref ntv) => {
                     let func = ntv.data;

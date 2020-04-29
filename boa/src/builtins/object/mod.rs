@@ -15,7 +15,7 @@
 
 use crate::{
     builtins::{
-        function::NativeFunctionData,
+        function_object::{Function, NativeFunctionData},
         property::Property,
         value::{from_value, same_value, to_value, ResultValue, Value, ValueData},
     },
@@ -50,6 +50,10 @@ pub struct Object {
     pub sym_properties: Box<HashMap<i32, Property>>,
     /// Some rust object that stores internal state
     pub state: Option<Box<InternalStateCell>>,
+    /// [[Call]]
+    pub call: Option<Function>,
+    /// [[Construct]]
+    pub construct: Option<Function>,
 }
 
 impl ObjectInternalMethods for Object {
@@ -318,6 +322,24 @@ impl Object {
             properties: Box::new(HashMap::new()),
             sym_properties: Box::new(HashMap::new()),
             state: None,
+            call: None,
+            construct: None,
+        };
+
+        object.set_internal_slot("extensible", to_value(true));
+        object
+    }
+
+    /// Return a new ObjectData struct, with `kind` set to Ordinary
+    pub fn function() -> Self {
+        let mut object = Object {
+            kind: ObjectKind::Function,
+            internal_slots: Box::new(HashMap::new()),
+            properties: Box::new(HashMap::new()),
+            sym_properties: Box::new(HashMap::new()),
+            state: None,
+            call: None,
+            construct: None,
         };
 
         object.set_internal_slot("extensible", to_value(true));
@@ -340,7 +362,17 @@ impl Object {
         obj
     }
 
-    /// Utility function to set an internal slot which is a function.
+    /// Set [[Call]]
+    pub fn set_call(&mut self, val: Function) {
+        self.call = Some(val);
+    }
+
+    /// set [[Construct]]
+    pub fn set_construct(&mut self, val: Function) {
+        self.construct = Some(val);
+    }
+
+    /// Utility function to set an internal slot which is a function
     pub fn set_internal_method(&mut self, name: &str, val: NativeFunctionData) {
         self.internal_slots.insert(name.to_string(), to_value(val));
     }
@@ -361,6 +393,8 @@ impl Object {
             properties: Box::new(HashMap::new()),
             sym_properties: Box::new(HashMap::new()),
             state: None,
+            call: None,
+            construct: None,
         };
 
         obj.internal_slots
@@ -376,6 +410,8 @@ impl Object {
             properties: Box::new(HashMap::new()),
             sym_properties: Box::new(HashMap::new()),
             state: None,
+            call: None,
+            construct: None,
         };
 
         obj.internal_slots
@@ -391,6 +427,8 @@ impl Object {
             properties: Box::new(HashMap::new()),
             sym_properties: Box::new(HashMap::new()),
             state: None,
+            call: None,
+            construct: None,
         };
 
         obj.internal_slots
