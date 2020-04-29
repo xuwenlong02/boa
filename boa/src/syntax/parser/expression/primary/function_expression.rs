@@ -34,7 +34,7 @@ impl TokenParser for FunctionExpression {
 
     fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
         let name = if let TokenKind::Identifier(name) =
-            &cursor.peek(0).ok_or(ParseError::AbruptEnd)?.kind
+            cursor.peek(0).ok_or(ParseError::AbruptEnd)?.kind
         {
             Some(name)
         } else {
@@ -58,6 +58,6 @@ impl TokenParser for FunctionExpression {
 
         cursor.expect(Punctuator::CloseBlock, "function expression", interner)?;
 
-        Ok(Node::function_decl::<_, &String, _, _>(name, params, body))
+        Ok(Node::function_decl(name, params, body))
     }
 }

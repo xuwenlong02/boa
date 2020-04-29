@@ -38,7 +38,7 @@ fn check_object_short_function() {
         PropertyDefinition::method_definition(
             MethodDefinitionKind::Ordinary,
             int.get_or_intern("b"),
-            Node::function_decl::<_, String, _, _>(None, Vec::new(), Node::StatementList(vec![])),
+            Node::function_decl(None, Vec::new(), Node::StatementList(vec![])),
         ),
     ];
 

@@ -50,6 +50,7 @@ fn check_empty_return() {
             vec![FormalParameter::new(int.get_or_intern("a"), None, false)],
             Node::StatementList(vec![Node::Return(None)]),
         )],
+        int,
     );
 }
 

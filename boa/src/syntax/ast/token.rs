@@ -44,6 +44,15 @@ impl Token {
             interner,
         }
     }
+
+    /// Gets the token as a symbol for an interned string.
+    ///
+    /// This is just an optimisation for
+    /// `interner.get_or_intern(token.display(interner).to_string())`.
+    pub fn to_string_sym(self, interner: &Interner) -> Sym {
+        // TODO: optimise by not allocating a string for booleans, literals, nulls and so on.
+        interner.get_or_intern(self.display(interner).to_string())
+    }
 }
 
 /// A continuous sequence of tokens.
@@ -169,6 +178,15 @@ impl TokenKind {
             kind: self,
             interner,
         }
+    }
+
+    /// Gets the token as a symbol for an interned string.
+    ///
+    /// This is just an optimisation for
+    /// `interner.get_or_intern(token_kind.display(interner).to_string())`.
+    pub fn to_string_sym(self, interner: &Interner) -> Sym {
+        // TODO: optimise by not allocating a string for booleans, literals, nulls and so on.
+        interner.get_or_intern(self.display(interner).to_string())
     }
 }
 

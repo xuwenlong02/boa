@@ -15,7 +15,7 @@ use crate::{
         ast::{
             node::{self, MethodDefinitionKind, Node},
             punc::Punctuator,
-            token::{Token, TokenKind},
+            token::TokenKind,
         },
         parser::{
             expression::AssignmentExpression,
@@ -23,7 +23,7 @@ use crate::{
             AllowAwait, AllowIn, AllowYield, Cursor, ParseError, ParseResult, TokenParser,
         },
     },
-    Interner,
+    Interner, Sym,
 };
 
 /// Parses an object literal.
@@ -78,8 +78,8 @@ impl TokenParser for ObjectLiteral {
                 let next_token = cursor.next().ok_or(ParseError::AbruptEnd)?;
                 return Err(ParseError::expected(
                     vec![
-                        TokenKind::Punctuator(Punctuator::Comma),
-                        TokenKind::Punctuator(Punctuator::CloseBlock),
+                        Punctuator::Comma.to_string(),
+                        Punctuator::CloseBlock.to_string(),
                     ],
                     next_token.display(interner).to_string(),
                     next_token.pos,
@@ -134,7 +134,7 @@ impl TokenParser for PropertyDefinition {
 
         let prop_name = cursor
             .next()
-            .map(Token::to_string)
+            .map(|tk| tk.to_string_sym(interner))
             .ok_or(ParseError::AbruptEnd)?;
         if cursor.next_if(Punctuator::Colon).is_some() {
             let val = AssignmentExpression::new(true, self.allow_yield, self.allow_await)
@@ -142,10 +142,12 @@ impl TokenParser for PropertyDefinition {
             return Ok(node::PropertyDefinition::Property(prop_name, val));
         }
 
+        // TODO: optimise comparison by using some pre-generated symbols.
         if cursor
             .next_if(TokenKind::Punctuator(Punctuator::OpenParen))
             .is_some()
-            || ["get", "set"].contains(&prop_name.as_str())
+            || prop_name == interner.get_or_intern("get")
+            || prop_name == interner.get_or_intern("set")
         {
             return MethodDefinition::new(self.allow_yield, self.allow_await, prop_name)
                 .parse(cursor, interner);
@@ -155,10 +157,7 @@ impl TokenParser for PropertyDefinition {
             .peek(0)
             .map(|tok| tok.pos)
             .ok_or(ParseError::AbruptEnd)?;
-        Err(ParseError::General(
-            "expected property definition",
-            Some(pos),
-        ))
+        Err(ParseError::general("expected property definition", pos))
     }
 }
 
@@ -172,21 +171,20 @@ impl TokenParser for PropertyDefinition {
 struct MethodDefinition {
     allow_yield: AllowYield,
     allow_await: AllowAwait,
-    identifier: String,
+    identifier: Sym,
 }
 
 impl MethodDefinition {
     /// Creates a new `MethodDefinition` parser.
-    fn new<Y, A, I>(allow_yield: Y, allow_await: A, identifier: I) -> Self
+    fn new<Y, A>(allow_yield: Y, allow_await: A, identifier: Sym) -> Self
     where
         Y: Into<AllowYield>,
         A: Into<AllowAwait>,
-        I: Into<String>,
     {
         Self {
             allow_yield: allow_yield.into(),
             allow_await: allow_await.into(),
-            identifier: identifier.into(),
+            identifier,
         }
     }
 }
@@ -199,11 +197,15 @@ impl TokenParser for MethodDefinition {
         cursor: &mut Cursor<'_>,
         interner: &mut Interner,
     ) -> Result<Self::Output, ParseError> {
-        let (methodkind, prop_name, params) = match self.identifier.as_str() {
+        // TODO: optimise by avoiding string comparisons and using only symbols
+        let (methodkind, prop_name, params) = match interner
+            .resolve(self.identifier)
+            .expect("identifier string disappeared")
+        {
             idn @ "get" | idn @ "set" => {
                 let prop_name = cursor
                     .next()
-                    .map(|tk| tk.display(interner).to_string())
+                    .map(|tk| tk.to_string_sym(interner))
                     .ok_or(ParseError::AbruptEnd)?;
                 cursor.expect(
                     Punctuator::OpenParen,
@@ -233,14 +235,10 @@ impl TokenParser for MethodDefinition {
                     (MethodDefinitionKind::Set, prop_name, params)
                 }
             }
-            prop_name => {
+            _ => {
                 let params = FormalParameters::new(false, false).parse(cursor, interner)?;
                 cursor.expect(Punctuator::CloseParen, "method definition", interner)?;
-                (
-                    MethodDefinitionKind::Ordinary,
-                    prop_name.to_string(),
-                    params,
-                )
+                (MethodDefinitionKind::Ordinary, self.identifier, params)
             }
         };
 
