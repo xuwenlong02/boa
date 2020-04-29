@@ -93,11 +93,7 @@ impl TokenParser for ForStatement {
         } else {
             let step = Expression::new(true, self.allow_yield, self.allow_await)
                 .parse(cursor, interner)?;
-            cursor.expect(
-                TokenKind::Punctuator(Punctuator::CloseParen),
-                "for statement",
-                interner,
-            )?;
+            cursor.expect(Punctuator::CloseParen, "for statement", interner)?;
             Some(step)
         };
 

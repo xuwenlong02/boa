@@ -77,18 +77,20 @@ impl TokenParser for PrimaryExpression {
             TokenKind::Punctuator(Punctuator::OpenBlock) => {
                 ObjectLiteral::new(self.allow_yield, self.allow_await).parse(cursor, interner)
             }
-            TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(*boolean)),
+            TokenKind::BooleanLiteral(boolean) => Ok(Node::const_node(boolean)),
             // TODO: ADD TokenKind::UndefinedLiteral
-            TokenKind::Identifier(ref i) if i == "undefined" => Ok(Node::Const(Const::Undefined)),
+            TokenKind::Identifier(i) if i == interner.get_or_intern("undefined") => {
+                Ok(Node::Const(Const::Undefined))
+            }
             TokenKind::NullLiteral => Ok(Node::Const(Const::Null)),
             TokenKind::Identifier(ident) => Ok(Node::local(ident)),
             TokenKind::StringLiteral(s) => Ok(Node::const_node(s)),
-            TokenKind::NumericLiteral(num) => Ok(Node::const_node(*num)),
+            TokenKind::NumericLiteral(num) => Ok(Node::const_node(num)),
             TokenKind::RegularExpressionLiteral(body, flags) => Ok(Node::new(Node::call(
-                Node::local("RegExp"),
+                Node::local(interner.get_or_intern("RegExp")),
                 vec![Node::const_node(body), Node::const_node(flags)],
             ))),
-            _ => Err(ParseError::Unexpected(
+            _ => Err(ParseError::unexpected(
                 tok.display(interner).to_string(),
                 tok.pos,
                 Some("primary expression"),

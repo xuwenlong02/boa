@@ -203,11 +203,12 @@ impl TokenParser for MethodDefinition {
             idn @ "get" | idn @ "set" => {
                 let prop_name = cursor
                     .next()
-                    .map(Token::to_string)
+                    .map(|tk| tk.display(interner).to_string())
                     .ok_or(ParseError::AbruptEnd)?;
                 cursor.expect(
-                    TokenKind::Punctuator(Punctuator::OpenParen),
+                    Punctuator::OpenParen,
                     "property method definition",
+                    interner,
                 )?;
                 let first_param = cursor.peek(0).expect("current token disappeared").clone();
                 let params = FormalParameters::new(false, false).parse(cursor, interner)?;
@@ -244,7 +245,7 @@ impl TokenParser for MethodDefinition {
         };
 
         cursor.expect(
-            TokenKind::Punctuator(Punctuator::OpenBlock),
+            Punctuator::OpenBlock,
             "property method definition",
             interner,
         )?;
@@ -252,7 +253,7 @@ impl TokenParser for MethodDefinition {
             .parse(cursor, interner)
             .map(Node::StatementList)?;
         cursor.expect(
-            TokenKind::Punctuator(Punctuator::CloseBlock),
+            Punctuator::CloseBlock,
             "property method definition",
             interner,
         )?;
@@ -302,11 +303,7 @@ impl TokenParser for Initializer {
     type Output = Node;
 
     fn parse(self, cursor: &mut Cursor<'_>, interner: &mut Interner) -> ParseResult {
-        cursor.expect(
-            TokenKind::Punctuator(Punctuator::Assign),
-            "initializer",
-            interner,
-        )?;
+        cursor.expect(Punctuator::Assign, "initializer", interner)?;
         AssignmentExpression::new(self.allow_in, self.allow_yield, self.allow_await)
             .parse(cursor, interner)
     }

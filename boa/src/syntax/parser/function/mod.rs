@@ -86,11 +86,10 @@ impl TokenParser for FormalParameters {
             }
 
             if rest_param {
-                return Err(ParseError::Unexpected(
-                    cursor
-                        .peek_prev()
-                        .expect("current token disappeared")
-                        .clone(),
+                let prev_tok = cursor.peek_prev().expect("current token disappeared");
+                return Err(ParseError::unexpected(
+                    prev_tok.display(interner).to_string(),
+                    prev_tok.pos,
                     Some("rest parameter must be the last formal parameter"),
                 ));
             }

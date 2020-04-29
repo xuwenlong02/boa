@@ -7,9 +7,13 @@ use crate::{
 fn check_string() {
     // Check empty string
     let mut int = Interner::new();
-    check_parser("\"\"", &[Node::const_node("")], int);
+    check_parser("\"\"", &[Node::const_node(int.get_or_intern(""))], int);
 
     // Check non-empty string
     let mut int = Interner::new();
-    check_parser("\"hello\"", &[Node::const_node("hello")], int);
+    check_parser(
+        "\"hello\"",
+        &[Node::const_node(int.get_or_intern("hello"))],
+        int,
+    );
 }
