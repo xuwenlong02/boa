@@ -42,7 +42,7 @@ pub trait ObjectInternalMethods {
                 // the parent value variant should be an object
                 // In the unlikely event it isn't return false
                 return match *parent {
-                    ValueData::Object(ref obj) => obj.borrow().has_property(val),
+                    ValueData::Object(ref obj) => obj.borrow().has_property(val, interner),
                     _ => false,
                 };
             }
@@ -80,7 +80,7 @@ pub trait ObjectInternalMethods {
     }
 
     /// Delete property.
-    fn delete(&mut self, prop_key: &Value) -> bool {
+    fn delete(&mut self, prop_key: &Value, interner: &mut Interner) -> bool {
         debug_assert!(Property::is_property_key(prop_key));
         let desc = self.get_own_property(prop_key);
         if desc
@@ -99,7 +99,9 @@ pub trait ObjectInternalMethods {
         false
     }
 
-    // [[Get]]
+    /// [[Get]]
+    ///
+    /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-get-p-receiver>
     fn get(&self, val: &Value) -> Value {
         debug_assert!(Property::is_property_key(val));
         let desc = self.get_own_property(val);
@@ -135,6 +137,7 @@ pub trait ObjectInternalMethods {
     }
 
     /// [[Set]]
+    ///
     /// <https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-set-p-v-receiver>
     fn set(&mut self, field: Value, val: Value) -> bool {
         // [1]
@@ -175,10 +178,10 @@ pub trait ObjectInternalMethods {
 
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p
     /// The specification returns a Property Descriptor or Undefined. These are 2 separate types and we can't do that here.
-    fn get_own_property(&self, prop: &Value) -> Property;
+    fn get_own_property(&self, prop: &Value, interner: &mut Interner) -> Property;
 
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v
-    fn set_prototype_of(&mut self, val: Value) -> bool;
+    fn set_prototype_of(&mut self, val: Value, interner: &mut Interner) -> bool;
 
     /// Returns either the prototype or null
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof

@@ -20,6 +20,7 @@ use crate::{
         value::{from_value, same_value, to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
+    Interner, Sym,
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
@@ -64,13 +65,16 @@ impl ObjectInternalMethods for Object {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/setPrototypeOf
-    fn set_prototype_of(&mut self, val: Value) -> bool {
+    fn set_prototype_of(&mut self, val: Value, interner: &mut Interner) -> bool {
         debug_assert!(val.is_object() || val.is_null());
-        let current = self.get_internal_slot(PROTOTYPE);
+
+        let prototype_sym = interner.get_or_intern(PROTOTYPE);
+
+        let current = self.get_internal_slot(prototype_sym);
         if current == val {
             return true;
         }
-        let extensible = self.get_internal_slot("extensible");
+        let extensible = self.get_internal_slot(interner.get_or_intern("extensible"));
         if extensible.is_null() {
             return false;
         }
@@ -82,10 +86,10 @@ impl ObjectInternalMethods for Object {
             } else if same_value(&to_value(self.clone()), &p, false) {
                 return false;
             } else {
-                p = p.get_internal_slot(PROTOTYPE);
+                p = p.get_internal_slot(prototype_sym);
             }
         }
-        self.set_internal_slot(PROTOTYPE, val);
+        self.set_internal_slot(prototype_sym, val);
         true
     }
 
@@ -100,12 +104,12 @@ impl ObjectInternalMethods for Object {
     }
 
     /// Helper function to set an internal slot
-    fn set_internal_slot(&mut self, name: &str, val: Value) {
+    fn set_internal_slot(&mut self, name: Sym, val: Value) {
         self.internal_slots.insert(name.to_string(), val);
     }
 
     /// Helper function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: &str) -> Value {
+    fn get_internal_slot(&self, name: Sym) -> Value {
         match self.internal_slots.get(name) {
             Some(v) => v.clone(),
             None => Gc::new(ValueData::Null),

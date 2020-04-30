@@ -64,9 +64,11 @@ pub enum ValueData {
 
 impl ValueData {
     /// Returns a new empty object
-    pub fn new_obj(global: Option<&Value>) -> Value {
+    pub fn new_obj(global: Option<&Value>, interner: &mut Interner) -> Value {
         if let Some(glob) = global {
-            let obj_proto = glob.get_field_slice("Object").get_field_slice(PROTOTYPE);
+            let obj_proto = glob
+                .get_field_slice(interner.get_or_intern("Object"))
+                .get_field_slice(interner.get_or_intern(PROTOTYPE));
 
             let obj = Object::create(obj_proto);
             Gc::new(Self::Object(GcCell::new(obj)))
@@ -78,12 +80,16 @@ impl ValueData {
 
     /// Similar to `new_obj`, but you can pass a prototype to create from,
     /// plus a kind
-    pub fn new_obj_from_prototype(proto: Value, kind: ObjectKind) -> Value {
+    pub fn new_obj_from_prototype(
+        proto: Value,
+        kind: ObjectKind,
+        interner: &mut Interner,
+    ) -> Value {
         let mut obj = Object::default();
         obj.kind = kind;
 
         obj.internal_slots
-            .insert(INSTANCE_PROTOTYPE.to_string(), proto);
+            .insert(interner.get_or_intern(INSTANCE_PROTOTYPE), proto);
 
         Gc::new(Self::Object(GcCell::new(obj)))
     }
@@ -118,10 +124,14 @@ impl ValueData {
     }
 
     /// Returns true if the value is a function
-    pub fn is_function(&self) -> bool {
+    pub fn is_function(&self, int: &mut Interner) -> bool {
         match *self {
             Self::Function(_) => true,
-            Self::Object(ref o) => o.deref().borrow().get_internal_slot("call").is_function(),
+            Self::Object(ref o) => o
+                .deref()
+                .borrow()
+                .get_internal_slot(int.get_or_intern("call")) // TODO: optimise by pre-saving
+                .is_function(int),
             _ => false,
         }
     }
@@ -234,13 +244,13 @@ impl ValueData {
     /// remove_prop removes a property from a Value object.
     ///
     /// It will return a boolean based on if the value was removed, if there was no value to remove false is returned
-    pub fn remove_prop(&self, field: &str) {
+    pub fn remove_prop(&self, field: Sym) {
         match *self {
-            Self::Object(ref obj) => obj.borrow_mut().deref_mut().properties.remove(field),
+            Self::Object(ref obj) => obj.borrow_mut().deref_mut().properties.remove(&field),
             // Accesing .object on borrow() seems to automatically dereference it, so we don't need the *
             Self::Function(ref func) => match func.borrow_mut().deref_mut() {
-                Function::NativeFunc(ref mut func) => func.object.properties.remove(field),
-                Function::RegularFunc(ref mut func) => func.object.properties.remove(field),
+                Function::NativeFunc(ref mut func) => func.object.properties.remove(&field),
+                Function::RegularFunc(ref mut func) => func.object.properties.remove(&field),
             },
             _ => None,
         };
@@ -256,7 +266,7 @@ impl ValueData {
             // TODO: optimise by having "length" pre-saved
             if let Self::String(s) = *self {
                 return Some(Property::default().value(to_value(
-                    interner.resolve(s).expect("string disappeared") as i32,
+                    interner.resolve(s).expect("string disappeared").len() as i32,
                 )));
             }
         }
@@ -280,10 +290,13 @@ impl ValueData {
             _ => return None,
         };
 
-        match obj.properties.get(field) {
+        match obj.properties.get(&field) {
             Some(val) => Some(val.clone()),
-            None => match obj.internal_slots.get(&INSTANCE_PROTOTYPE.to_string()) {
-                Some(value) => value.get_prop(field),
+            None => match obj
+                .internal_slots
+                .get(&interner.get_or_intern(INSTANCE_PROTOTYPE))
+            {
+                Some(value) => value.get_prop(field, interner),
                 None => None,
             },
         }
@@ -294,7 +307,7 @@ impl ValueData {
     /// Mostly used internally for now
     pub fn update_prop(
         &self,
-        field: &str,
+        field: Sym,
         value: Option<Value>,
         enumerable: Option<bool>,
         writable: Option<bool>,
@@ -312,7 +325,7 @@ impl ValueData {
 
         if let Some(mut obj_data) = obj {
             // Use value, or walk up the prototype chain
-            if let Some(ref mut prop) = obj_data.properties.get_mut(field) {
+            if let Some(ref mut prop) = obj_data.properties.get_mut(&field) {
                 prop.value = value;
                 prop.enumerable = enumerable;
                 prop.writable = writable;
@@ -324,7 +337,7 @@ impl ValueData {
     /// Resolve the property in the object.
     ///
     /// Returns a copy of the Property.
-    pub fn get_internal_slot(&self, field: &str) -> Value {
+    pub fn get_internal_slot(&self, field: Sym) -> Value {
         let obj: Object = match *self {
             Self::Object(ref obj) => {
                 let hash = obj.clone();
@@ -337,7 +350,7 @@ impl ValueData {
             _ => return Gc::new(Self::Undefined),
         };
 
-        match obj.internal_slots.get(field) {
+        match obj.internal_slots.get(&field) {
             Some(val) => val.clone(),
             None => Gc::new(Self::Undefined),
         }
@@ -346,11 +359,11 @@ impl ValueData {
     /// Resolve the property in the object and get its value, or undefined if this is not an object or the field doesn't exist
     /// get_field recieves a Property from get_prop(). It should then return the [[Get]] result value if that's set, otherwise fall back to [[Value]]
     /// TODO: this function should use the get Value if its set
-    pub fn get_field(&self, field: Value) -> Value {
+    pub fn get_field(&self, field: Value, interner: &mut Interner) -> Value {
         match *field {
             // Our field will either be a String or a Symbol
-            Self::String(ref s) => {
-                match self.get_prop(s) {
+            Self::String(s) => {
+                match self.get_prop(s, interner) {
                     Some(prop) => {
                         // If the Property has [[Get]] set to a function, we should run that and return the Value
                         let prop_getter = match prop.get {
@@ -447,30 +460,32 @@ impl ValueData {
     }
 
     /// Check to see if the Value has the field, mainly used by environment records
-    pub fn has_field(&self, field: &str) -> bool {
-        self.get_prop(field).is_some()
+    pub fn has_field(&self, field: Sym, interner: &mut Interner) -> bool {
+        self.get_prop(field, interner).is_some()
     }
 
     /// Resolve the property in the object and get its value, or undefined if this is not an object or the field doesn't exist
-    pub fn get_field_slice(&self, field: &str) -> Value {
+    pub fn get_field_slice(&self, field: Sym, interner: &mut Interner) -> Value {
         // get_field used to accept strings, but now Symbols accept it needs to accept a value
         // So this function will now need to Box strings back into values (at least for now)
-        let f = Gc::new(Self::String(field.to_string()));
-        self.get_field(f)
+        let f = Gc::new(Self::String(field));
+        self.get_field(f, interner)
     }
 
     /// Set the field in the value
     /// Field could be a Symbol, so we need to accept a Value (not a string)
-    pub fn set_field(&self, field: Value, val: Value) -> Value {
+    pub fn set_field(&self, field: Value, val: Value, interner: &mut Interner) -> Value {
         match *self {
             Self::Object(ref obj) => {
                 if obj.borrow().kind == ObjectKind::Array {
                     if let Ok(num) = field.to_string().parse::<usize>() {
                         if num > 0 {
-                            let len: i32 = from_value(self.get_field_slice("length"))
-                                .expect("Could not convert argument to i32");
+                            let length_sym = interner.get_or_intern("length");
+                            let len: i32 =
+                                from_value(self.get_field_slice(length_sym, interner), interner)
+                                    .expect("Could not convert argument to i32");
                             if len < (num + 1) as i32 {
-                                self.set_field_slice("length", to_value(num + 1));
+                                self.set_field_slice(length_sym, to_value(num + 1), interner);
                             }
                         }
                     }
@@ -481,19 +496,19 @@ impl ValueData {
                     obj.borrow_mut().set(field, val.clone());
                 } else {
                     obj.borrow_mut()
-                        .set(to_value(field.to_string()), val.clone());
+                        .set(to_value(field.to_string_sym(interner)), val.clone());
                 }
             }
             Self::Function(ref func) => {
                 match *func.borrow_mut().deref_mut() {
-                    Function::NativeFunc(ref mut f) => f
-                        .object
-                        .properties
-                        .insert(field.to_string(), Property::default().value(val.clone())),
-                    Function::RegularFunc(ref mut f) => f
-                        .object
-                        .properties
-                        .insert(field.to_string(), Property::default().value(val.clone())),
+                    Function::NativeFunc(ref mut f) => f.object.properties.insert(
+                        field.to_string_sym(interner),
+                        Property::default().value(val.clone()),
+                    ),
+                    Function::RegularFunc(ref mut f) => f.object.properties.insert(
+                        field.to_string_sym(interner),
+                        Property::default().value(val.clone()),
+                    ),
                 };
             }
             _ => (),
@@ -502,19 +517,17 @@ impl ValueData {
     }
 
     /// Set the field in the value
-    pub fn set_field_slice<'a>(&self, field: &'a str, val: Value) -> Value {
+    pub fn set_field_slice(&self, field: Sym, val: Value, interner: &mut Interner) -> Value {
         // set_field used to accept strings, but now Symbols accept it needs to accept a value
         // So this function will now need to Box strings back into values (at least for now)
-        let f = Gc::new(Self::String(field.to_string()));
-        self.set_field(f, val)
+        let f = Gc::new(Self::String(field));
+        self.set_field(f, val, interner)
     }
 
     /// Set the private field in the value
-    pub fn set_internal_slot(&self, field: &str, val: Value) -> Value {
+    pub fn set_internal_slot(&self, field: Sym, val: Value) -> Value {
         if let Self::Object(ref obj) = *self {
-            obj.borrow_mut()
-                .internal_slots
-                .insert(field.to_string(), val.clone());
+            obj.borrow_mut().internal_slots.insert(field, val.clone());
         }
         val
     }
@@ -528,7 +541,7 @@ impl ValueData {
     }
 
     /// Set the property in the value
-    pub fn set_prop(&self, field: String, prop: Property) -> Property {
+    pub fn set_prop(&self, field: Sym, prop: Property) -> Property {
         match *self {
             Self::Object(ref obj) => {
                 obj.borrow_mut().properties.insert(field, prop.clone());
@@ -549,8 +562,8 @@ impl ValueData {
     }
 
     /// Set the property in the value
-    pub fn set_prop_slice<'t>(&self, field: &'t str, prop: Property) -> Property {
-        self.set_prop(field.to_string(), prop)
+    pub fn set_prop_slice(&self, field: Sym, prop: Property) -> Property {
+        self.set_prop(field, prop)
     }
 
     /// Set internal state of an Object. Discards the previous state if it was set.
@@ -563,23 +576,23 @@ impl ValueData {
     }
 
     /// Convert from a JSON value to a JS value
-    pub fn from_json(json: JSONValue) -> Self {
+    pub fn from_json(json: JSONValue, interner: &mut Interner) -> Self {
         match json {
             JSONValue::Number(v) => {
                 Self::Number(v.as_f64().expect("Could not convert value to f64"))
             }
-            JSONValue::String(v) => Self::String(v),
+            JSONValue::String(v) => Self::String(interner.get_or_intern(v)),
             JSONValue::Bool(v) => Self::Boolean(v),
             JSONValue::Array(vs) => {
                 let mut new_obj = Object::default();
                 for (idx, json) in vs.iter().enumerate() {
                     new_obj.properties.insert(
-                        idx.to_string(),
+                        interner.get_or_intern(idx.to_string()),
                         Property::default().value(to_value(json.clone())),
                     );
                 }
                 new_obj.properties.insert(
-                    "length".to_string(),
+                    interner.get_or_intern("length"),
                     Property::default().value(to_value(vs.len() as i32)),
                 );
                 Self::Object(GcCell::new(new_obj))
@@ -588,7 +601,7 @@ impl ValueData {
                 let mut new_obj = Object::default();
                 for (key, json) in obj.iter() {
                     new_obj.properties.insert(
-                        key.clone(),
+                        interner.get_or_intern(key),
                         Property::default().value(to_value(json.clone())),
                     );
                 }
@@ -600,7 +613,7 @@ impl ValueData {
     }
 
     /// Conversts the `Value` to `JSON`.
-    pub fn to_json(&self) -> JSONValue {
+    pub fn to_json(&self, interner: &mut Interner) -> JSONValue {
         match *self {
             ValueData::Null
             | ValueData::Symbol(_)
@@ -612,11 +625,18 @@ impl ValueData {
                     .borrow()
                     .properties
                     .iter()
-                    .map(|(k, _)| (k.clone(), self.get_field_slice(k).to_json()))
+                    .map(|(k, _)| {
+                        (
+                            interner.resolve(*k).expect("string disappeared").to_owned(),
+                            self.get_field_slice(*k, interner).to_json(interner),
+                        )
+                    })
                     .collect::<Map<String, JSONValue>>();
                 JSONValue::Object(new_obj)
             }
-            Self::String(ref str) => JSONValue::String(str.clone()),
+            Self::String(s) => {
+                JSONValue::String(interner.resolve(s).expect("string disappeared").to_owned())
+            }
             Self::Number(num) => JSONValue::Number(
                 JSONNumber::from_f64(num).expect("Could not convert to JSONNumber"),
             ),
@@ -627,27 +647,31 @@ impl ValueData {
     /// Get the type of the value
     ///
     /// https://tc39.es/ecma262/#sec-typeof-operator
-    pub fn get_type(&self) -> &'static str {
+    pub fn get_type(&self, interner: &mut Interner) -> Sym {
         match *self {
-            Self::Number(_) | Self::Integer(_) => "number",
-            Self::String(_) => "string",
-            Self::Boolean(_) => "boolean",
-            Self::Symbol(_) => "symbol",
-            Self::Null => "null",
-            Self::Undefined => "undefined",
-            Self::Function(_) => "function",
+            Self::Number(_) | Self::Integer(_) => interner.get_or_intern("number"),
+            Self::String(_) => interner.get_or_intern("string"),
+            Self::Boolean(_) => interner.get_or_intern("boolean"),
+            Self::Symbol(_) => interner.get_or_intern("symbol"),
+            Self::Null => interner.get_or_intern("null"),
+            Self::Undefined => interner.get_or_intern("undefined"),
+            Self::Function(_) => interner.get_or_intern("function"),
             Self::Object(ref o) => {
-                if o.deref().borrow().get_internal_slot("call").is_null() {
-                    "object"
+                if o.deref()
+                    .borrow()
+                    .get_internal_slot(interner.get_or_intern("call"))
+                    .is_null()
+                {
+                    interner.get_or_intern("object")
                 } else {
-                    "function"
+                    interner.get_or_intern("function")
                 }
             }
         }
     }
 
-    pub fn as_num_to_power(&self, other: Self) -> Self {
-        Self::Number(self.to_num().powf(other.to_num()))
+    pub fn as_num_to_power(&self, other: Self, interner: &mut Interner) -> Self {
+        Self::Number(self.to_num(interner).powf(other.to_num(interner)))
     }
 }
 
@@ -718,7 +742,11 @@ macro_rules! print_obj_value {
     };
 }
 
-pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
+pub(crate) fn log_string_from(
+    x: &ValueData,
+    print_internals: bool,
+    interner: &mut Interner,
+) -> String {
     match x {
         // We don't want to print private (compiler) or prototype properties
         ValueData::Object(ref v) => {
@@ -728,13 +756,16 @@ pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
                 ObjectKind::String => from_value(
                     v.borrow()
                         .internal_slots
-                        .get("StringData")
+                        .get(&interner.get_or_intern("StringData"))
                         .expect("Cannot get primitive value from String")
                         .clone(),
                 )
                 .expect("Cannot clone primitive value from String"),
                 ObjectKind::Boolean => {
-                    let bool_data = v.borrow().get_internal_slot("BooleanData").to_string();
+                    let bool_data = v
+                        .borrow()
+                        .get_internal_slot(interner.get_or_intern("BooleanData"))
+                        .to_string();
 
                     format!("Boolean {{ {} }}", bool_data)
                 }
@@ -742,7 +773,7 @@ pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
                     let len: i32 = from_value(
                         v.borrow()
                             .properties
-                            .get("length")
+                            .get(&interner.get_or_intern("length"))
                             .unwrap()
                             .value
                             .clone()
@@ -761,12 +792,13 @@ pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
                             log_string_from(
                                 &v.borrow()
                                     .properties
-                                    .get(&i.to_string())
+                                    .get(&interner.get_or_intern(i.to_string()))
                                     .unwrap()
                                     .value
                                     .clone()
                                     .expect("Could not borrow value"),
                                 print_internals,
+                                interner,
                             )
                         })
                         .collect::<Vec<String>>()
@@ -778,9 +810,14 @@ pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
             }
         }
         ValueData::Symbol(ref sym) => {
-            let desc: Value = sym.borrow().get_internal_slot("Description");
+            let desc: Value = sym
+                .borrow()
+                .get_internal_slot(interner.get_or_intern("Description"));
             match *desc {
-                ValueData::String(ref st) => format!("Symbol(\"{}\")", st.to_string()),
+                ValueData::String(st) => format!(
+                    "Symbol(\"{}\")",
+                    interner.resolve(st).expect("string disappeared")
+                ),
                 _ => String::from("Symbol()"),
             }
         }
@@ -790,7 +827,7 @@ pub(crate) fn log_string_from(x: &ValueData, print_internals: bool) -> String {
 }
 
 /// A helper function for specifically printing object values
-pub(crate) fn display_obj(v: &ValueData, print_internals: bool) -> String {
+pub(crate) fn display_obj(v: &ValueData, print_internals: bool, interner: &mut Interner) -> String {
     // A simple helper for getting the address of a value
     // TODO: Find a more general place for this, as it can be used in other situations as well
     fn address_of<T>(t: &T) -> usize {
@@ -845,19 +882,30 @@ pub(crate) fn display_obj(v: &ValueData, print_internals: bool) -> String {
     display_obj_internal(v, &mut encounters, 4, print_internals)
 }
 
-impl Display for ValueData {
+/// Structure implementing the `fmt::Display` trait for a `ValueData`.
+#[derive(Debug)]
+struct ValueDataDisplay<'v, 'i> {
+    value: &'v ValueData,
+    interner: &'i Interner,
+}
+
+impl Display for ValueDataDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Null => write!(f, "null"),
-            Self::Undefined => write!(f, "undefined"),
-            Self::Boolean(v) => write!(f, "{}", v),
-            Self::Symbol(ref v) => match *v.borrow().get_internal_slot("Description") {
-                // If a description exists use it
-                Self::String(ref v) => write!(f, "{}", format!("Symbol({})", v)),
-                _ => write!(f, "Symbol()"),
-            },
-            Self::String(ref v) => write!(f, "{}", v),
-            Self::Number(v) => write!(
+        match self.value {
+            ValueData::Null => write!(f, "null"),
+            ValueData::Undefined => write!(f, "undefined"),
+            ValueData::Boolean(v) => write!(f, "{}", v),
+            ValueData::Symbol(ref v) => {
+                match *v.borrow().get_internal_slot("Description", self.interner) {
+                    // If a description exists use it
+                    ValueData::String(ref v) => write!(f, "{}", format!("Symbol({})", v)),
+                    _ => write!(f, "Symbol()"),
+                }
+            }
+            ValueData::String(v) => {
+                write!(f, "{}", interner.resolve(v).expect("string disappeared"))
+            }
+            ValueData::Number(v) => write!(
                 f,
                 "{}",
                 match v {
@@ -867,9 +915,11 @@ impl Display for ValueData {
                     _ => v.to_string(),
                 }
             ),
-            Self::Object(_) => write!(f, "{}", log_string_from(self, true)),
-            Self::Integer(v) => write!(f, "{}", v),
-            Self::Function(ref v) => match *v.borrow() {
+            ValueData::Object(_) => {
+                write!(f, "{}", log_string_from(self.value, true, self.interner))
+            }
+            ValueData::Integer(v) => write!(f, "{}", v),
+            ValueData::Function(ref v) => match *v.borrow() {
                 Function::NativeFunc(_) => write!(f, "function() {{ [native code] }}"),
                 Function::RegularFunc(ref rf) => {
                     write!(f, "function{}(", if rf.args.is_empty() { "" } else { " " })?;
@@ -984,7 +1034,7 @@ pub trait ToValue {
 /// Conversion to Rust values from Javascript values
 pub trait FromValue {
     /// Convert this value to a Javascript value
-    fn from_value(value: Value) -> Result<Self, &'static str>
+    fn from_value(value: Value, interner: &Interner) -> Result<Self, &'static str>
     where
         Self: Sized;
 }
@@ -1001,15 +1051,15 @@ impl FromValue for Value {
     }
 }
 
-impl ToValue for String {
+impl ToValue for Sym {
     fn to_value(&self) -> Value {
-        Gc::new(ValueData::String(self.clone()))
+        Gc::new(ValueData::String(self))
     }
 }
 
 impl FromValue for String {
-    fn from_value(v: Value) -> Result<Self, &'static str> {
-        Ok(v.to_string())
+    fn from_value(v: Value, interner: &Interner) -> Result<Self, &'static str> {
+        Ok(v.display(interner).to_string())
     }
 }
 

@@ -16,6 +16,7 @@ use crate::{
         lexical_environment::LexicalEnvironment,
         object_environment_record::ObjectEnvironmentRecord,
     },
+    Interner,
 };
 use gc::{Gc, GcCell};
 use std::collections::{hash_map::HashMap, hash_set::HashSet};
@@ -30,10 +31,10 @@ pub struct Realm {
 }
 
 impl Realm {
-    pub fn create() -> Self {
+    pub fn create(interner: &mut Interner) -> Self {
         // Create brand new global object
         // Global has no prototype to pass None to new_obj
-        let global = ValueData::new_obj(None);
+        let global = ValueData::new_obj(None, interner);
         // We need to clone the global here because its referenced from separate places (only pointer is cloned)
         let global_env = new_global_environment(global.clone(), global.clone());
 

@@ -79,7 +79,7 @@ impl Executor for Interpreter {
             // we can't move String from Const into value, because const is a garbage collected value
             // Which means Drop() get's called on Const, but str will be gone at that point.
             // Do Const values need to be garbage collected? We no longer need them once we've generated Values
-            Node::Const(Const::String(ref str)) => Ok(to_value(str.to_owned())),
+            Node::Const(Const::String(s)) => Ok(to_value(s)),
             Node::Const(Const::Bool(val)) => Ok(to_value(val)),
             Node::Block(ref es) => {
                 {
