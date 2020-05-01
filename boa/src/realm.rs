@@ -24,17 +24,17 @@ use std::collections::{hash_map::HashMap, hash_set::HashSet};
 /// Representation of a Realm.   
 /// In the specification these are called Realm Records.
 #[derive(Debug)]
-pub struct Realm {
+pub struct Realm<'i> {
     pub global_obj: Value,
-    pub global_env: Gc<GcCell<Box<GlobalEnvironmentRecord>>>,
+    pub global_env: Gc<GcCell<Box<GlobalEnvironmentRecord<'i>>>>,
     pub environment: LexicalEnvironment,
 }
 
-impl Realm {
-    pub fn create(interner: &mut Interner) -> Self {
+impl Realm<'_> {
+    pub fn create() -> Self {
         // Create brand new global object
         // Global has no prototype to pass None to new_obj
-        let global = ValueData::new_obj(None, interner);
+        let global = ValueData::new_obj(None);
         // We need to clone the global here because its referenced from separate places (only pointer is cloned)
         let global_env = new_global_environment(global.clone(), global.clone());
 
@@ -79,10 +79,11 @@ impl Realm {
 }
 
 // Similar to new_global_environment in lexical_environment, except we need to return a GlobalEnvirionment
-fn new_global_environment(
+fn new_global_environment<'i>(
     global: Value,
     this_value: Value,
-) -> Gc<GcCell<Box<GlobalEnvironmentRecord>>> {
+    interner: &'i Interner,
+) -> Gc<GcCell<Box<GlobalEnvironmentRecord<'i>>>> {
     let obj_rec = Box::new(ObjectEnvironmentRecord {
         bindings: global,
         outer_env: None,
@@ -104,5 +105,6 @@ fn new_global_environment(
         global_this_binding: this_value,
         declarative_record: dcl_rec,
         var_names: HashSet::new(),
+        interner,
     })))
 }

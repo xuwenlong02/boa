@@ -20,7 +20,6 @@ use crate::{
         value::{from_value, same_value, to_value, ResultValue, Value, ValueData},
     },
     exec::Interpreter,
-    Interner, Sym,
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
@@ -44,9 +43,9 @@ pub struct Object {
     /// The type of the object.
     pub kind: ObjectKind,
     /// Intfiernal Slots
-    pub internal_slots: Box<HashMap<Sym, Value>>,
+    pub internal_slots: Box<HashMap<String, Value>>,
     /// Properties
-    pub properties: Box<HashMap<Sym, Property>>,
+    pub properties: Box<HashMap<String, Property>>,
     /// Symbol Properties
     pub sym_properties: Box<HashMap<i32, Property>>,
     /// Some rust object that stores internal state
@@ -65,16 +64,14 @@ impl ObjectInternalMethods for Object {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v
     /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/setPrototypeOf
-    fn set_prototype_of(&mut self, val: Value, interner: &mut Interner) -> bool {
+    fn set_prototype_of(&mut self, val: Value) -> bool {
         debug_assert!(val.is_object() || val.is_null());
 
-        let prototype_sym = interner.get_or_intern(PROTOTYPE);
-
-        let current = self.get_internal_slot(prototype_sym);
+        let current = self.get_internal_slot(PROTOTYPE);
         if current == val {
             return true;
         }
-        let extensible = self.get_internal_slot(interner.get_or_intern("extensible"));
+        let extensible = self.get_internal_slot("extensible");
         if extensible.is_null() {
             return false;
         }
@@ -86,16 +83,19 @@ impl ObjectInternalMethods for Object {
             } else if same_value(&to_value(self.clone()), &p, false) {
                 return false;
             } else {
-                p = p.get_internal_slot(prototype_sym);
+                p = p.get_internal_slot(PROTOTYPE);
             }
         }
-        self.set_internal_slot(prototype_sym, val);
+        self.set_internal_slot(PROTOTYPE.to_owned(), val);
         true
     }
 
     /// Helper function for property insertion.
-    fn insert_property(&mut self, name: String, p: Property) {
-        self.properties.insert(name, p);
+    fn insert_property<N>(&mut self, name: N, p: Property)
+    where
+        N: Into<String>,
+    {
+        self.properties.insert(name.into(), p);
     }
 
     /// Helper function for property removal.
@@ -104,12 +104,15 @@ impl ObjectInternalMethods for Object {
     }
 
     /// Helper function to set an internal slot
-    fn set_internal_slot(&mut self, name: Sym, val: Value) {
-        self.internal_slots.insert(name.to_string(), val);
+    fn set_internal_slot<N>(&mut self, name: N, val: Value)
+    where
+        N: Into<String>,
+    {
+        self.internal_slots.insert(name.into(), val);
     }
 
     /// Helper function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: Sym) -> Value {
+    fn get_internal_slot(&self, name: &str) -> Value {
         match self.internal_slots.get(name) {
             Some(v) => v.clone(),
             None => Gc::new(ValueData::Null),
@@ -125,6 +128,7 @@ impl ObjectInternalMethods for Object {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p
     fn get_own_property(&self, prop: &Value) -> Property {
+        // TODO: optimise this, we only need the string slice.
         debug_assert!(Property::is_property_key(prop));
         // Prop could either be a String or Symbol
         match *(*prop) {
@@ -187,8 +191,11 @@ impl ObjectInternalMethods for Object {
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-defineownproperty-p-desc
     #[allow(clippy::option_unwrap_used)]
-    fn define_own_property(&mut self, property_key: String, desc: Property) -> bool {
-        let mut current = self.get_own_property(&to_value(property_key.to_string()));
+    fn define_own_property<K>(&mut self, property_key: K, desc: Property) -> bool
+    where
+        K: Into<String>,
+    {
+        let mut current = self.get_own_property(&to_value(property_key.into()));
         let extensible = self.is_extensible();
 
         // https://tc39.es/ecma262/#sec-validateandapplypropertydescriptor
@@ -207,7 +214,7 @@ impl ObjectInternalMethods for Object {
                     .expect("parsing failed");
                 self.sym_properties.insert(sym_id, desc);
             } else {
-                self.properties.insert(property_key, desc);
+                self.properties.insert(property_key.into(), desc);
             }
             return true;
         }
@@ -259,7 +266,7 @@ impl ObjectInternalMethods for Object {
                     .expect("parsing failed");
                 self.sym_properties.insert(sym_id, current);
             } else {
-                self.properties.insert(property_key.clone(), current);
+                self.properties.insert(property_key.into(), current);
             }
         // 7
         } else if current.is_data_descriptor() && desc.is_data_descriptor() {
@@ -308,7 +315,7 @@ impl ObjectInternalMethods for Object {
             return true;
         }
         // 9
-        self.properties.insert(property_key, desc);
+        self.properties.insert(property_key.into(), desc);
         true
     }
 }
@@ -324,7 +331,7 @@ impl Object {
             state: None,
         };
 
-        object.set_internal_slot("extensible", to_value(true));
+        object.set_internal_slot("extensible".to_owned(), to_value(true));
         object
     }
 

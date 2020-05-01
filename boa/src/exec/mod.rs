@@ -30,19 +30,19 @@ use std::{
 };
 
 /// An execution engine
-pub trait Executor {
+pub trait Executor<'i> {
     /// Make a new execution engine
-    fn new(realm: Realm) -> Self;
+    fn new(realm: Realm<'i>) -> Self;
     /// Run an expression
     fn run(&mut self, expr: &Node) -> ResultValue;
 }
 
 /// A Javascript intepreter
 #[derive(Debug)]
-pub struct Interpreter {
+pub struct Interpreter<'i> {
     is_return: bool,
     /// realm holds both the global object and the environment
-    pub realm: Realm,
+    pub realm: Realm<'i>,
 }
 
 fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
@@ -61,15 +61,15 @@ fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
     })
 }
 
-impl Executor for Interpreter {
-    fn new(realm: Realm) -> Self {
+impl<'i> Executor<'i> for Interpreter<'i> {
+    fn new(realm: Realm<'i>) -> Self {
         Self {
             realm,
             is_return: false,
         }
     }
 
-    #[allow(clippy::match_same_arms)]
+    //#[allow(clippy::match_same_arms)]
     fn run(&mut self, node: &Node) -> ResultValue {
         match *node {
             Node::Const(Const::Null) => Ok(to_value(None::<()>)),
@@ -576,9 +576,9 @@ impl Executor for Interpreter {
     }
 }
 
-impl Interpreter {
+impl Interpreter<'_> {
     /// Get the Interpreter's realm
-    pub(crate) fn get_realm(&self) -> &Realm {
+    pub(crate) fn get_realm(&self) -> &Realm<'_> {
         &self.realm
     }
 

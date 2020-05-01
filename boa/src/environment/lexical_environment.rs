@@ -6,18 +6,22 @@
 //! This is the entrypoint to lexical environments.
 //!
 
-use crate::builtins::value::{Value, ValueData};
-use crate::environment::declarative_environment_record::DeclarativeEnvironmentRecord;
-use crate::environment::environment_record_trait::EnvironmentRecordTrait;
-use crate::environment::function_environment_record::{BindingStatus, FunctionEnvironmentRecord};
-use crate::environment::global_environment_record::GlobalEnvironmentRecord;
-use crate::environment::object_environment_record::ObjectEnvironmentRecord;
+use crate::{
+    builtins::value::{Value, ValueData},
+    environment::{
+        declarative_environment_record::DeclarativeEnvironmentRecord,
+        environment_record_trait::EnvironmentRecordTrait,
+        function_environment_record::{BindingStatus, FunctionEnvironmentRecord},
+        global_environment_record::GlobalEnvironmentRecord,
+        object_environment_record::ObjectEnvironmentRecord,
+    },
+    Interner, Sym,
+};
 use gc::{Gc, GcCell};
-use std::collections::hash_map::HashMap;
-use std::collections::{HashSet, VecDeque};
-use std::debug_assert;
-use std::error;
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    error, fmt,
+};
 
 /// Environments are wrapped in a Box and then in a GC wrapper
 pub type Environment = Gc<GcCell<Box<dyn EnvironmentRecordTrait>>>;
@@ -113,7 +117,7 @@ impl LexicalEnvironment {
             .get_global_object()
     }
 
-    pub fn create_mutable_binding(&mut self, name: String, deletion: bool, scope: VariableScope) {
+    pub fn create_mutable_binding(&mut self, name: Sym, deletion: bool, scope: VariableScope) {
         match scope {
             VariableScope::Block => self
                 .get_current_environment()
@@ -136,7 +140,7 @@ impl LexicalEnvironment {
 
     pub fn create_immutable_binding(
         &mut self,
-        name: String,
+        name: Sym,
         deletion: bool,
         scope: VariableScope,
     ) -> bool {
@@ -164,7 +168,7 @@ impl LexicalEnvironment {
         }
     }
 
-    pub fn set_mutable_binding(&mut self, name: &str, value: Value, strict: bool) {
+    pub fn set_mutable_binding(&mut self, name: Sym, value: Value, strict: bool) {
         // Find the first environment which has the given binding
         let env = self
             .environments()
@@ -174,7 +178,7 @@ impl LexicalEnvironment {
         env.borrow_mut().set_mutable_binding(name, value, strict);
     }
 
-    pub fn initialize_binding(&mut self, name: &str, value: Value) {
+    pub fn initialize_binding(&mut self, name: Sym, value: Value) {
         // Find the first environment which has the given binding
         let env = self
             .environments()
@@ -202,12 +206,12 @@ impl LexicalEnvironment {
             .expect("Could not get mutable reference to back object")
     }
 
-    pub fn has_binding(&self, name: &str) -> bool {
+    pub fn has_binding(&self, name: Sym) -> bool {
         self.environments()
             .any(|env| env.borrow().has_binding(name))
     }
 
-    pub fn get_binding_value(&self, name: &str) -> Value {
+    pub fn get_binding_value(&self, name: Sym) -> Value {
         self.environments()
             .find(|env| env.borrow().has_binding(name))
             .map(|env| env.borrow().get_binding_value(name, false))
@@ -255,7 +259,11 @@ pub fn new_object_environment(object: Value, environment: Option<Environment>) -
     })))
 }
 
-pub fn new_global_environment(global: Value, this_value: Value) -> Environment {
+pub fn new_global_environment(
+    global: Value,
+    this_value: Value,
+    interner: &Interner,
+) -> Environment {
     let obj_rec = Box::new(ObjectEnvironmentRecord {
         bindings: global,
         outer_env: None,
@@ -277,6 +285,7 @@ pub fn new_global_environment(global: Value, this_value: Value) -> Environment {
         global_this_binding: this_value,
         declarative_record: dcl_rec,
         var_names: HashSet::new(),
+        interner,
     })))
 }
 

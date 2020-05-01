@@ -21,7 +21,7 @@ use crate::{
 use gc::Gc;
 
 /// Create a new error object.
-pub fn make_error(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn make_error(this: &Value, args: &[Value], _: &mut Interpreter<'_>) -> ResultValue {
     if !args.is_empty() {
         this.set_field_slice(
             "message",
@@ -48,7 +48,7 @@ pub fn make_error(this: &Value, args: &[Value], _: &mut Interpreter) -> ResultVa
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-error.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/toString
-pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
+pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter<'_>) -> ResultValue {
     let name = this.get_field_slice("name");
     let message = this.get_field_slice("message");
     Ok(to_value(format!("{}: {}", name, message)))

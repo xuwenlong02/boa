@@ -5,13 +5,10 @@
 //!
 //! [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots
 
-use crate::{
-    builtins::{
-        object::{Object, PROTOTYPE},
-        property::Property,
-        value::{to_value, Value, ValueData},
-    },
-    Interner, Sym,
+use crate::builtins::{
+    object::{Object, PROTOTYPE},
+    property::Property,
+    value::{to_value, Value, ValueData},
 };
 use gc::Gc;
 use std::borrow::Borrow;
@@ -33,16 +30,16 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-hasproperty-p
-    fn has_property(&self, val: &Value, interner: &mut Interner) -> bool {
+    fn has_property(&self, val: &Value) -> bool {
         debug_assert!(Property::is_property_key(val));
         let prop = self.get_own_property(val);
         if prop.value.is_none() {
-            let parent: Value = self.get_prototype_of(interner);
+            let parent: Value = self.get_prototype_of();
             if !parent.is_null() {
                 // the parent value variant should be an object
                 // In the unlikely event it isn't return false
                 return match *parent {
-                    ValueData::Object(ref obj) => obj.borrow().has_property(val, interner),
+                    ValueData::Object(ref obj) => obj.borrow().has_property(val),
                     _ => false,
                 };
             }
@@ -58,9 +55,9 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-isextensible
-    fn is_extensible(&self, interner: &mut Interner) -> bool {
+    fn is_extensible(&self) -> bool {
         // TODO: optimise by pre-saving "extensible".
-        let val = self.get_internal_slot(interner.get_or_intern("extensible"));
+        let val = self.get_internal_slot("extensible");
         match *val.deref().borrow() {
             ValueData::Boolean(b) => b,
             _ => false,
@@ -73,14 +70,14 @@ pub trait ObjectInternalMethods {
     ///  - [ECMAScript reference][spec]
     ///
     /// [spec]: https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-preventextensions
-    fn prevent_extensions(&mut self, interner: &mut Interner) -> bool {
+    fn prevent_extensions(&mut self) -> bool {
         // TODO: optimise by pre-saving "extensible".
-        self.set_internal_slot(interner.get_or_intern("extensible"), to_value(false));
+        self.set_internal_slot("extensible", to_value(false));
         true
     }
 
     /// Delete property.
-    fn delete(&mut self, prop_key: &Value, interner: &mut Interner) -> bool {
+    fn delete(&mut self, prop_key: &Value) -> bool {
         debug_assert!(Property::is_property_key(prop_key));
         let desc = self.get_own_property(prop_key);
         if desc
@@ -92,7 +89,7 @@ pub trait ObjectInternalMethods {
             return true;
         }
         if desc.configurable.expect("unable to get value") {
-            self.remove_property(prop_key);
+            self.remove_property(prop_key.to_string().as_str());
             return true;
         }
 
@@ -164,7 +161,7 @@ pub trait ObjectInternalMethods {
 
             // Change value on the current descriptor
             own_desc = own_desc.value(val);
-            return self.define_own_property(field, own_desc);
+            return self.define_own_property(field.to_string(), own_desc);
         }
         // [4]
         debug_assert!(own_desc.is_accessor_descriptor());
@@ -178,26 +175,32 @@ pub trait ObjectInternalMethods {
 
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getownproperty-p
     /// The specification returns a Property Descriptor or Undefined. These are 2 separate types and we can't do that here.
-    fn get_own_property(&self, prop: &Value, interner: &mut Interner) -> Property;
+    fn get_own_property(&self, prop: &Value) -> Property;
 
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-setprototypeof-v
-    fn set_prototype_of(&mut self, val: Value, interner: &mut Interner) -> bool;
+    fn set_prototype_of(&mut self, val: Value) -> bool;
 
     /// Returns either the prototype or null
     /// https://tc39.es/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots-getprototypeof
-    fn get_prototype_of(&self, interner: &Interner) -> Value {
+    fn get_prototype_of(&self) -> Value {
         // TODO: optimise by pre-saving the string symbol
-        self.get_internal_slot(interner.get_or_intern(PROTOTYPE))
+        self.get_internal_slot(PROTOTYPE)
     }
 
-    fn define_own_property(&mut self, property_key: Sym, desc: Property) -> bool;
+    fn define_own_property<K>(&mut self, property_key: K, desc: Property) -> bool
+    where
+        K: Into<String>;
 
     /// Utility function to get an immutable internal slot or Null
-    fn get_internal_slot(&self, name: Sym) -> Value;
+    fn get_internal_slot(&self, name: &str) -> Value;
 
-    fn set_internal_slot(&mut self, name: Sym, val: Value);
+    fn set_internal_slot<N>(&mut self, name: N, val: Value)
+    where
+        N: Into<String>;
 
-    fn insert_property(&mut self, name: Sym, p: Property);
+    fn insert_property<N>(&mut self, name: N, p: Property)
+    where
+        N: Into<String>;
 
-    fn remove_property(&mut self, name: Sym);
+    fn remove_property(&mut self, name: &str);
 }

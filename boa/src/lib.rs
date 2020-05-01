@@ -66,7 +66,7 @@ fn parser_expr(src: &str) -> Result<Node, String> {
 
 /// Execute the code using an existing Interpreter
 /// The str is consumed and the state of the Interpreter is changed
-pub fn forward(engine: &mut Interpreter, src: &str) -> String {
+pub fn forward(engine: &mut Interpreter<'_>, src: &str) -> String {
     // Setup executor
     let expr = match parser_expr(src) {
         Ok(v) => v,
@@ -85,7 +85,7 @@ pub fn forward(engine: &mut Interpreter, src: &str) -> String {
 /// The str is consumed and the state of the Interpreter is changed
 /// Similar to `forward`, except the current value is returned instad of the string
 /// If the interpreter fails parsing an error value is returned instead (error object)
-pub fn forward_val(engine: &mut Interpreter, src: &str) -> ResultValue {
+pub fn forward_val(engine: &mut Interpreter<'_>, src: &str) -> ResultValue {
     // Setup executor
     match parser_expr(src) {
         Ok(expr) => engine.run(&expr),
@@ -100,7 +100,7 @@ pub fn forward_val(engine: &mut Interpreter, src: &str) -> ResultValue {
 pub fn exec(src: &str) -> String {
     // Create new Realm
     let realm = Realm::create();
-    let mut engine: Interpreter = Executor::new(realm);
+    let mut engine: Interpreter<'_> = Executor::new(realm);
     forward(&mut engine, src)
 }
 
