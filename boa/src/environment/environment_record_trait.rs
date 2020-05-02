@@ -20,7 +20,7 @@ use std::fmt::Debug;
 ///
 /// In the ECMAScript specification Environment Records are hierachical and have a base class with abstract methods.   
 /// In this implementation we have a trait which represents the behaviour of all `EnvironmentRecord` types.
-pub trait EnvironmentRecordTrait: Debug + Trace + Finalize {
+pub trait EnvironmentRecordTrait: Debug {
     /// Determine if an Environment Record has a binding for the String value N. Return true if it does and false if it does not.
     fn has_binding(&self, name: Sym) -> bool;
 

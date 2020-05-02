@@ -41,7 +41,7 @@ use rand::random;
 /// - [ECMAScript reference][spec]
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-symbol-description
-pub fn call_symbol(_: &Value, args: &[Value], ctx: &mut Interpreter<'_>) -> ResultValue {
+pub fn call_symbol(_: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
     // From an implementation and specificaition perspective Symbols are similar to Objects.
     // They have internal slots to hold the SymbolData and Description, they also have methods and a prototype.
     // So we start by creating an Object
@@ -79,7 +79,7 @@ pub fn call_symbol(_: &Value, args: &[Value], ctx: &mut Interpreter<'_>) -> Resu
 ///
 /// [spec]: https://tc39.es/ecma262/#sec-symbol.prototype.tostring
 /// [mdn]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toString
-pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter<'_>) -> ResultValue {
+pub fn to_string(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
     let s: Value = this.get_internal_slot("Description");
     let full_string = format!(r#"Symbol({})"#, s.to_string());
     Ok(to_value(full_string))

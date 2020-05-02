@@ -21,22 +21,21 @@ use gc::Gc;
 use gc_derive::{Finalize, Trace};
 use std::collections::HashSet;
 
-#[derive(Debug, Trace, Finalize, Clone)]
-pub struct GlobalEnvironmentRecord<'i> {
+#[derive(Debug, Clone)]
+pub struct GlobalEnvironmentRecord {
     pub object_record: Box<ObjectEnvironmentRecord>,
     pub global_this_binding: Value,
     pub declarative_record: Box<DeclarativeEnvironmentRecord>,
-    pub var_names: HashSet<String>,
-    interner: &'i Interner,
+    pub var_names: HashSet<Sym>,
 }
 
-impl GlobalEnvironmentRecord<'_> {
+impl GlobalEnvironmentRecord {
     pub fn get_this_binding(&self) -> Value {
         self.global_this_binding.clone()
     }
 
     pub fn has_var_declaration(&self, name: Sym) -> bool {
-        self.var_names.contains(name)
+        self.var_names.contains(&name)
     }
 
     pub fn has_lexical_declaration(&self, name: Sym) -> bool {
@@ -92,7 +91,7 @@ impl GlobalEnvironmentRecord<'_> {
     }
 }
 
-impl EnvironmentRecordTrait for GlobalEnvironmentRecord<'_> {
+impl EnvironmentRecordTrait for GlobalEnvironmentRecord {
     fn has_binding(&self, name: Sym) -> bool {
         if self.declarative_record.has_binding(name) {
             return true;

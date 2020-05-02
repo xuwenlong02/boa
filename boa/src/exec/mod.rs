@@ -30,19 +30,19 @@ use std::{
 };
 
 /// An execution engine
-pub trait Executor<'i> {
+pub trait Executor {
     /// Make a new execution engine
-    fn new(realm: Realm<'i>) -> Self;
+    fn new(realm: Realm) -> Self;
     /// Run an expression
     fn run(&mut self, expr: &Node) -> ResultValue;
 }
 
 /// A Javascript intepreter
 #[derive(Debug)]
-pub struct Interpreter<'i> {
+pub struct Interpreter {
     is_return: bool,
     /// realm holds both the global object and the environment
-    pub realm: Realm<'i>,
+    pub realm: Realm,
 }
 
 fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
@@ -61,8 +61,8 @@ fn exec_assign_op(op: &AssignOp, v_a: ValueData, v_b: ValueData) -> Value {
     })
 }
 
-impl<'i> Executor<'i> for Interpreter<'i> {
-    fn new(realm: Realm<'i>) -> Self {
+impl Executor for Interpreter {
+    fn new(realm: Realm) -> Self {
         Self {
             realm,
             is_return: false,
@@ -576,9 +576,9 @@ impl<'i> Executor<'i> for Interpreter<'i> {
     }
 }
 
-impl Interpreter<'_> {
+impl Interpreter {
     /// Get the Interpreter's realm
-    pub(crate) fn get_realm(&self) -> &Realm<'_> {
+    pub(crate) fn get_realm(&self) -> &Realm {
         &self.realm
     }
 
