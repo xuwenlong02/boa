@@ -28,6 +28,7 @@ use gc::{Gc, GcCell};
 use std::{
     borrow::Borrow,
     ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 /// An execution engine
@@ -85,9 +86,9 @@ impl Executor for Interpreter {
             Node::Block(ref es) => {
                 {
                     let env = &mut self.realm.environment;
-                    env.push(new_declarative_environment(Some(
-                        env.get_current_environment_ref().clone(),
-                    )));
+                    env.push(new_declarative_environment(Some(Rc::downgrade(
+                        env.get_current_environment_ref(),
+                    ))));
                 }
 
                 let mut obj = to_value(None::<()>);
@@ -423,7 +424,7 @@ impl Executor for Interpreter {
                             env.push(new_function_environment(
                                 construct.clone(),
                                 this,
-                                Some(env.get_current_environment_ref().clone()),
+                                Some(Rc::downgrade(env.get_current_environment_ref())),
                             ));
 
                             for i in 0..data.args.len() {
@@ -552,9 +553,9 @@ impl Executor for Interpreter {
             Node::StatementList(ref list) => {
                 {
                     let env = &mut self.realm.environment;
-                    env.push(new_declarative_environment(Some(
-                        env.get_current_environment_ref().clone(),
-                    )));
+                    env.push(new_declarative_environment(Some(Rc::downgrade(
+                        env.get_current_environment_ref(),
+                    ))));
                 }
 
                 let mut obj = to_value(None::<()>);
@@ -615,7 +616,7 @@ impl Interpreter {
                     env.push(new_function_environment(
                         f.clone(),
                         undefined,
-                        Some(env.get_current_environment_ref().clone()),
+                        Some(Rc::downgrade(env.get_current_environment_ref())),
                     ));
                     for i in 0..data.args.len() {
                         let arg_expr = data.args.get(i).expect("Could not get data argument");

@@ -11,22 +11,19 @@ use crate::{
         property::Property,
         value::{Value, ValueData},
     },
-    environment::{
-        environment_record_trait::EnvironmentRecordTrait,
-        lexical_environment::{Environment, EnvironmentType},
-    },
+    environment::{lexical_environment::EnvironmentType, EnvironmentRecord},
 };
 use gc::Gc;
-use gc_derive::{Finalize, Trace};
+use std::{cell::RefCell, rc::Weak};
 
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Clone)]
 pub struct ObjectEnvironmentRecord {
     pub bindings: Value,
     pub with_environment: bool,
-    pub outer_env: Option<Environment>,
+    pub outer_env: Option<Weak<RefCell<dyn EnvironmentRecord>>>,
 }
 
-impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
+impl EnvironmentRecord for ObjectEnvironmentRecord {
     fn has_binding(&self, name: &str) -> bool {
         if self.bindings.has_field(name) {
             if self.with_environment {
@@ -105,14 +102,11 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
         Gc::new(ValueData::Undefined)
     }
 
-    fn get_outer_environment(&self) -> Option<Environment> {
-        match &self.outer_env {
-            Some(outer) => Some(outer.clone()),
-            None => None,
-        }
+    fn get_outer_environment(&self) -> Option<Weak<RefCell<dyn EnvironmentRecord>>> {
+        self.outer_env.as_ref().map(Weak::clone)
     }
 
-    fn set_outer_environment(&mut self, env: Environment) {
+    fn set_outer_environment(&mut self, env: Weak<RefCell<dyn EnvironmentRecord>>) {
         self.outer_env = Some(env);
     }
 
@@ -121,10 +115,14 @@ impl EnvironmentRecordTrait for ObjectEnvironmentRecord {
     }
 
     fn get_global_object(&self) -> Option<Value> {
-        if let Some(outer) = &self.outer_env {
-            outer.borrow().get_global_object()
-        } else {
-            None
-        }
+        self.outer_env
+            .as_ref()
+            .map(|env| {
+                env.upgrade()
+                    .expect("outer env disappeared")
+                    .borrow()
+                    .get_global_object()
+            })
+            .flatten()
     }
 }

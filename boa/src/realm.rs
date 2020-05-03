@@ -17,15 +17,17 @@ use crate::{
         object_environment_record::ObjectEnvironmentRecord,
     },
 };
-use gc::{Gc, GcCell};
-use std::collections::{hash_map::HashMap, hash_set::HashSet};
+use std::{
+    collections::{hash_map::HashMap, hash_set::HashSet},
+    rc::Rc,
+};
 
 /// Representation of a Realm.   
 /// In the specification these are called Realm Records.
 #[derive(Debug)]
 pub struct Realm {
     pub global_obj: Value,
-    pub global_env: Gc<GcCell<Box<GlobalEnvironmentRecord>>>,
+    pub global_env: Rc<Box<GlobalEnvironmentRecord>>,
     pub environment: LexicalEnvironment,
 }
 
@@ -78,11 +80,8 @@ impl Realm {
 }
 
 // Similar to new_global_environment in lexical_environment, except we need to return a GlobalEnvirionment
-fn new_global_environment(
-    global: Value,
-    this_value: Value,
-) -> Gc<GcCell<Box<GlobalEnvironmentRecord>>> {
-    let obj_rec = Box::new(ObjectEnvironmentRecord {
+fn new_global_environment(global: Value, this_value: Value) -> Rc<Box<GlobalEnvironmentRecord>> {
+    let obj_rec = ObjectEnvironmentRecord {
         bindings: global,
         outer_env: None,
         /// Object Environment Records created for with statements (13.11)
@@ -91,17 +90,17 @@ fn new_global_environment(
         /// with each object Environment Record. By default, the value of withEnvironment is false
         /// for any object Environment Record.
         with_environment: false,
-    });
+    };
 
-    let dcl_rec = Box::new(DeclarativeEnvironmentRecord {
+    let dcl_rec = DeclarativeEnvironmentRecord {
         env_rec: HashMap::new(),
         outer_env: None,
-    });
+    };
 
-    Gc::new(GcCell::new(Box::new(GlobalEnvironmentRecord {
+    Rc::new(Box::new(GlobalEnvironmentRecord {
         object_record: obj_rec,
         global_this_binding: this_value,
         declarative_record: dcl_rec,
         var_names: HashSet::new(),
-    })))
+    }))
 }

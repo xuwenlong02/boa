@@ -7,14 +7,11 @@
 
 use crate::{
     builtins::value::{Value, ValueData},
-    environment::{
-        environment_record_trait::EnvironmentRecordTrait,
-        lexical_environment::{Environment, EnvironmentType},
-    },
+    environment::{lexical_environment::EnvironmentType, EnvironmentRecord},
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
-use std::collections::hash_map::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Weak};
 
 /// Declarative Bindings have a few properties for book keeping purposes, such as mutability (const vs let).
 /// Can it be deleted? and strict mode.
@@ -31,13 +28,13 @@ pub struct DeclarativeEnvironmentRecordBinding {
 
 /// A declarative Environment Record binds the set of identifiers defined by the
 /// declarations contained within its scope.
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Clone)]
 pub struct DeclarativeEnvironmentRecord {
     pub env_rec: HashMap<String, DeclarativeEnvironmentRecordBinding>,
-    pub outer_env: Option<Environment>,
+    pub outer_env: Option<Weak<RefCell<dyn EnvironmentRecord>>>,
 }
 
-impl EnvironmentRecordTrait for DeclarativeEnvironmentRecord {
+impl EnvironmentRecord for DeclarativeEnvironmentRecord {
     fn has_binding(&self, name: &str) -> bool {
         self.env_rec.contains_key(name)
     }
@@ -158,11 +155,11 @@ impl EnvironmentRecordTrait for DeclarativeEnvironmentRecord {
         Gc::new(ValueData::Undefined)
     }
 
-    fn get_outer_environment(&self) -> Option<Environment> {
-        self.outer_env.as_ref().cloned()
+    fn get_outer_environment(&self) -> Option<Weak<RefCell<dyn EnvironmentRecord>>> {
+        self.outer_env.as_ref().map(Weak::clone)
     }
 
-    fn set_outer_environment(&mut self, env: Environment) {
+    fn set_outer_environment(&mut self, env: Weak<RefCell<dyn EnvironmentRecord>>) {
         self.outer_env = Some(env);
     }
 
@@ -171,9 +168,14 @@ impl EnvironmentRecordTrait for DeclarativeEnvironmentRecord {
     }
 
     fn get_global_object(&self) -> Option<Value> {
-        match &self.outer_env {
-            Some(outer) => outer.borrow().get_global_object(),
-            None => None,
-        }
+        self.outer_env
+            .as_ref()
+            .map(|env| {
+                env.upgrade()
+                    .expect("outer env disappeared")
+                    .borrow()
+                    .get_global_object()
+            })
+            .flatten()
     }
 }

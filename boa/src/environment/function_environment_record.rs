@@ -12,13 +12,12 @@ use crate::{
     builtins::value::{Value, ValueData},
     environment::{
         declarative_environment_record::DeclarativeEnvironmentRecordBinding,
-        environment_record_trait::EnvironmentRecordTrait,
-        lexical_environment::{Environment, EnvironmentType},
+        lexical_environment::EnvironmentType, EnvironmentRecord,
     },
 };
 use gc::Gc;
 use gc_derive::{Finalize, Trace};
-use std::collections::hash_map::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Weak};
 
 /// Different binding status for `this`.
 /// Usually set on a function environment record
@@ -33,7 +32,7 @@ pub enum BindingStatus {
 }
 
 /// <https://tc39.es/ecma262/#table-16>
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Clone)]
 pub struct FunctionEnvironmentRecord {
     pub env_rec: HashMap<String, DeclarativeEnvironmentRecordBinding>,
     /// This is the this value used for this invocation of the function.
@@ -52,7 +51,7 @@ pub struct FunctionEnvironmentRecord {
     pub new_target: Value,
     /// Reference to the outer environment to help with the scope chain
     /// Option type is needed as some environments can be created before we know what the outer env is
-    pub outer_env: Option<Environment>,
+    pub outer_env: Option<Weak<RefCell<dyn EnvironmentRecord>>>,
 }
 
 impl FunctionEnvironmentRecord {
@@ -92,7 +91,7 @@ impl FunctionEnvironmentRecord {
     }
 }
 
-impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
+impl EnvironmentRecord for FunctionEnvironmentRecord {
     // TODO: get_super_base can't implement until GetPrototypeof is implemented on object
 
     fn has_binding(&self, name: &str) -> bool {
@@ -224,14 +223,11 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
         Gc::new(ValueData::Undefined)
     }
 
-    fn get_outer_environment(&self) -> Option<Environment> {
-        match &self.outer_env {
-            Some(outer) => Some(outer.clone()),
-            None => None,
-        }
+    fn get_outer_environment(&self) -> Option<Weak<RefCell<dyn EnvironmentRecord>>> {
+        self.outer_env.as_ref().map(Weak::clone)
     }
 
-    fn set_outer_environment(&mut self, env: Environment) {
+    fn set_outer_environment(&mut self, env: Weak<RefCell<dyn EnvironmentRecord>>) {
         self.outer_env = Some(env);
     }
 
@@ -240,9 +236,14 @@ impl EnvironmentRecordTrait for FunctionEnvironmentRecord {
     }
 
     fn get_global_object(&self) -> Option<Value> {
-        match &self.outer_env {
-            Some(ref outer) => outer.borrow().get_global_object(),
-            None => None,
-        }
+        self.outer_env
+            .as_ref()
+            .map(|env| {
+                env.upgrade()
+                    .expect("outer env disappeared")
+                    .borrow()
+                    .get_global_object()
+            })
+            .flatten()
     }
 }

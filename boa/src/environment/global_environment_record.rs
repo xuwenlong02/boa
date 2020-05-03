@@ -11,20 +11,18 @@ use crate::{
     builtins::value::{Value, ValueData},
     environment::{
         declarative_environment_record::DeclarativeEnvironmentRecord,
-        environment_record_trait::EnvironmentRecordTrait,
-        lexical_environment::{Environment, EnvironmentType},
-        object_environment_record::ObjectEnvironmentRecord,
+        lexical_environment::EnvironmentType, object_environment_record::ObjectEnvironmentRecord,
+        EnvironmentRecord,
     },
 };
 use gc::Gc;
-use gc_derive::{Finalize, Trace};
-use std::collections::HashSet;
+use std::{cell::RefCell, collections::HashSet, rc::Weak};
 
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Clone)]
 pub struct GlobalEnvironmentRecord {
-    pub object_record: Box<ObjectEnvironmentRecord>,
+    pub object_record: ObjectEnvironmentRecord,
     pub global_this_binding: Value,
-    pub declarative_record: Box<DeclarativeEnvironmentRecord>,
+    pub declarative_record: DeclarativeEnvironmentRecord,
     pub var_names: HashSet<String>,
 }
 
@@ -90,7 +88,7 @@ impl GlobalEnvironmentRecord {
     }
 }
 
-impl EnvironmentRecordTrait for GlobalEnvironmentRecord {
+impl EnvironmentRecord for GlobalEnvironmentRecord {
     fn has_binding(&self, name: &str) -> bool {
         if self.declarative_record.has_binding(name) {
             return true;
@@ -174,11 +172,11 @@ impl EnvironmentRecordTrait for GlobalEnvironmentRecord {
         Gc::new(ValueData::Undefined)
     }
 
-    fn get_outer_environment(&self) -> Option<Environment> {
+    fn get_outer_environment(&self) -> Option<Weak<RefCell<dyn EnvironmentRecord>>> {
         None
     }
 
-    fn set_outer_environment(&mut self, _env: Environment) {
+    fn set_outer_environment(&mut self, _env: Weak<RefCell<dyn EnvironmentRecord>>) {
         // TODO: Implement
         panic!("Not implemented yet")
     }
